@@ -3,7 +3,12 @@ kind: Kustomization
 namespace: wayline
 resources:
   - api.yaml
+  - routing.yaml
+  - traffic-worker.yaml
 images:
   - name: wayline-api
     newName: ghcr.io/OWNER/wayline-api
+    newTag: latest
+  - name: wayline-traffic-worker
+    newName: ghcr.io/OWNER/wayline-traffic-worker
     newTag: latest

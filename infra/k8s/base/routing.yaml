@@ -1,0 +1,71 @@
+# Valhalla (routing + map matching) and Photon (geocoding). Both read prebuilt data from a volume:
+# build Valhalla tiles / download the Photon index in a Job or CI pipeline, then roll these out.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: valhalla, labels: { app: valhalla } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: valhalla } }
+  template:
+    metadata: { labels: { app: valhalla } }
+    spec:
+      containers:
+        - name: valhalla
+          image: ghcr.io/nilsnolde/docker-valhalla/valhalla:latest
+          env:
+            - { name: use_tiles_ignore_pbf, value: "True" }
+            - { name: server_threads, value: "4" }
+          ports: [{ name: http, containerPort: 8002 }]
+          volumeMounts: [{ name: tiles, mountPath: /custom_files }]
+          readinessProbe: { httpGet: { path: /status, port: http }, periodSeconds: 10 }
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits: { memory: 3Gi }
+      volumes:
+        - name: tiles
+          persistentVolumeClaim: { claimName: valhalla-tiles, readOnly: true }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: valhalla-tiles }
+spec:
+  accessModes: [ReadOnlyMany]
+  resources: { requests: { storage: 10Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: valhalla }
+spec:
+  selector: { app: valhalla }
+  ports: [{ name: http, port: 8002, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: photon }
+spec:
+  serviceName: photon
+  replicas: 1
+  selector: { matchLabels: { app: photon } }
+  template:
+    metadata: { labels: { app: photon } }
+    spec:
+      containers:
+        - name: photon
+          image: rtuszik/photon-docker:2.4.0
+          env: [{ name: REGION, value: il }, { name: LANGUAGES, value: 'he,en' }]
+          ports: [{ name: http, containerPort: 2322 }]
+          volumeMounts: [{ name: data, mountPath: /photon/data }]
+          readinessProbe: { tcpSocket: { port: http }, periodSeconds: 10 }
+          resources:
+            requests: { cpu: 250m, memory: 1Gi }
+            limits: { memory: 2Gi }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec: { accessModes: [ReadWriteOnce], resources: { requests: { storage: 20Gi } } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: photon }
+spec:
+  selector: { app: photon }
+  ports: [{ name: http, port: 2322, targetPort: http }]

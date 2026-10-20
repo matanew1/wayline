@@ -1,7 +1,9 @@
 # Local stack.
 #   npm run infra:up                         → postgres, redis, redpanda (enough for STORE_DRIVER=infra)
 #   docker compose --profile routing up -d   → + Valhalla (first start builds Israel tiles, ~10–20 min)
-#   docker compose --profile app up -d --build → + the API container itself
+#   docker compose --profile app up -d --build → + the API and traffic worker containers
+#   docker compose --profile geocoder up -d      → + self-hosted Photon (Israel extract; first start downloads data)
+#   docker compose --profile observability up -d → + Jaeger (traces, :16686) and Prometheus (:9090)
 name: wayline
 
 services:
@@ -65,6 +67,42 @@ services:
     ports: ["8002:8002"]
     volumes: ["./valhalla_data:/custom_files"]
 
+  photon:
+    profiles: ["geocoder"]
+    # Community-maintained Photon image; downloads a prebuilt country index on first start.
+    image: rtuszik/photon-docker:2.4.0
+    environment:
+      REGION: il
+      LANGUAGES: he,en
+      UPDATE_STRATEGY: SEQUENTIAL
+    ports: ["2322:2322"]
+    volumes: ["photon_data:/photon/data"]
+
+  jaeger:
+    profiles: ["observability"]
+    image: jaegertracing/all-in-one:1.62.0
+    environment: { COLLECTOR_OTLP_ENABLED: "true" }
+    ports: ["16686:16686", "4318:4318"]
+
+  prometheus:
+    profiles: ["observability"]
+    image: prom/prometheus:v2.55.1
+    volumes: ["./infra/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+
+  traffic-worker:
+    profiles: ["app"]
+    build: { context: apps/traffic-worker }
+    depends_on:
+      redis: { condition: service_healthy }
+      redpanda-init: { condition: service_completed_successfully }
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      REDIS_URL: redis://redis:6379
+      VALHALLA_URL: http://valhalla:8002
+      DATABASE_URL: postgresql://wayline:wayline@postgres:5432/wayline
+    ports: ["9464:9464"]
+
   api:
     profiles: ["app"]
     build: { context: ., dockerfile: apps/api/Dockerfile }
@@ -78,7 +116,13 @@ services:
       STORE_DRIVER: infra
       ROUTING_DRIVER: valhalla
       GEOCODER_DRIVER: photon
-      GEOCODER_URL: https://photon.komoot.io
+      # self-hosted with --profile geocoder; the public instance is for light development use only
+      GEOCODER_URL: ${GEOCODER_URL:-https://photon.komoot.io}
+      SMS_DRIVER: ${SMS_DRIVER:-twilio}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_MESSAGING_SERVICE_SID: ${TWILIO_MESSAGING_SERVICE_SID:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       DATABASE_URL: postgres://wayline:wayline@postgres:5432/wayline
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: redpanda:9092
@@ -91,3 +135,4 @@ services:
 
 volumes:
   pgdata:
+  photon_data:

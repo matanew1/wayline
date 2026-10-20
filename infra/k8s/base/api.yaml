@@ -12,6 +12,9 @@ data:
   VALHALLA_URL: http://valhalla:8002
   KAFKA_BROKERS: redpanda:9092
   OTP_DEV_ECHO: "false"
+  SMS_DRIVER: twilio
+  LOG_FORMAT: json
+  OTEL_SERVICE_NAME: wayline-api
 ---
 apiVersion: batch/v1
 kind: Job
@@ -47,6 +50,7 @@ spec:
   template:
     metadata:
       labels: { app: wayline-api }
+      annotations: { prometheus.io/scrape: "true", prometheus.io/port: "3000", prometheus.io/path: /metrics }
     spec:
       terminationGracePeriodSeconds: 30
       containers:
@@ -55,7 +59,7 @@ spec:
           ports: [{ name: http, containerPort: 3000 }]
           envFrom:
             - configMapRef: { name: wayline-api }
-            - secretRef: { name: wayline-api }   # JWT_SECRET, PHONE_PEPPER, DATABASE_URL, REDIS_URL
+            - secretRef: { name: wayline-api }   # JWT_SECRET, PHONE_PEPPER, DATABASE_URL, REDIS_URL, TWILIO_*, OTEL_EXPORTER_OTLP_ENDPOINT
           readinessProbe:
             httpGet: { path: /health, port: http }
             periodSeconds: 5

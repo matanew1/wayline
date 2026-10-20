@@ -36,6 +36,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     'expo-router',
     'expo-secure-store',
+    // Hebrew UI: allow right-to-left layout (switched at runtime by the language setting)
+    ['expo-localization', { supportsRTL: true }],
     '@maplibre/maplibre-react-native',
     [
       'expo-location',
@@ -51,6 +53,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // Dev builds talk to a local API over plain HTTP.
     ['expo-build-properties', { android: { usesCleartextTraffic: isDev } }],
   ],
+  // Localised system strings (permission prompts, app name)
+  locales: { en: './locales/en.json', he: './locales/he.json' },
   experiments: { typedRoutes: true },
   extra: {
     apiUrl: process.env.EXPO_PUBLIC_API_URL,

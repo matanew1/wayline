@@ -1,25 +1,18 @@
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as Speech from 'expo-speech';
 import type { Report, ReportType, RouteOption } from '@wayline/contracts';
-import { cellsAround, haversineM, NavigationSession, type Fix, type LatLng } from '@wayline/navigation-core';
+import { cellsAround, formatDuration, haversineM, NavigationSession, type Fix, type LatLng } from '@wayline/navigation-core';
 import { config, isDevBuild } from '@/config';
+import { lang, speechLocale, t } from '@/i18n';
 import { realtime } from '@/api/realtime';
-import { ApiError, createReport, nearbyReports, planRoutes, sendProbes, startTrip, updateTrip, voteReport } from '@/api/wayline';
+import {
+  ApiError, createReport, nearbyReports, planRoutes, sendProbes, startTrip, tripEta, updateTrip, voteReport,
+} from '@/api/wayline';
 import { startNavGps, startSimulated, type NavLocationSource } from '@/location/location';
+import { setSetting, settings, type AlertType } from '@/state/settings';
 import { get, removeReport, selectedRoute, set, toast, upsertReport, useApp, type Destination } from '@/state/store';
-import { reportLabels } from '@/theme';
 
 const KEEP_AWAKE_TAG = 'wayline-drive';
-const SPEECH_LANG = config.language === 'he' ? 'he-IL' : 'en-US';
-
-/** Spoken for these types only — the rest still show on the map. */
-const SPOKEN_ALERTS: Partial<Record<ReportType, string>> = {
-  police: 'Police reported ahead',
-  crash: 'Crash reported ahead',
-  hazard: 'Hazard reported ahead',
-  closure: 'Road closed ahead',
-  camera: 'Speed camera ahead',
-};
 
 interface ActiveDrive {
   session: NavigationSession<Report>;
@@ -32,11 +25,12 @@ interface ActiveDrive {
 let drive: ActiveDrive | null = null;
 
 function speak(text: string) {
-  if (get().muted) return;
-  Speech.speak(text, { language: SPEECH_LANG, rate: 1.0 });
+  if (!settings().voice) return;
+  Speech.speak(text, { language: speechLocale(), rate: 1.0 });
 }
 
-const msg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong');
+const msg = (e: unknown) => (e instanceof Error ? e.message : t('somethingWrong'));
+const typeLabel = (type: string) => t(`type.${type}` as 'type.police');
 
 /** Where planning starts: GPS, or the fallback centre in dev builds (emulators without a GPS fix). */
 function origin(): LatLng | null {
@@ -69,7 +63,7 @@ export function connectRealtime() {
 export async function planTo(dest: Destination) {
   const from = origin();
   if (!from) {
-    toast('Waiting for your location…');
+    toast(t('waitingLocation'));
     return;
   }
   set({ destination: dest, planning: true, screen: 'preview', routes: [], selectedRouteId: null });
@@ -78,7 +72,7 @@ export async function planTo(dest: Destination) {
     set({ routes, selectedRouteId: routes[0]?.id ?? null });
   } catch (e) {
     set({ screen: 'home', destination: null });
-    toast(e instanceof ApiError && e.status === 404 ? 'No route found to this place' : msg(e));
+    toast(e instanceof ApiError && e.status === 404 ? t('noRoute') : msg(e));
   } finally {
     set({ planning: false });
   }
@@ -102,7 +96,7 @@ export async function startDrive() {
   } catch (e) {
     // routes are cached server-side for 30 min; re-plan if they expired
     if (e instanceof ApiError && e.status === 404) {
-      toast('Route expired — updating');
+      toast(t('routeExpired'));
       await planTo(s.destination);
     } else toast(msg(e));
     return;
@@ -110,10 +104,15 @@ export async function startDrive() {
 
   const session = new NavigationSession<Report>(route, destination, {
     now: () => Date.now(),
-    language: config.language,
+    language: lang(),
     speak: (text) => speak(text),
-    alertText: (r) => SPOKEN_ALERTS[r.type] ?? null,
+    alertText: (r) => (settings().spokenAlerts[r.type as AlertType] ? t(`say.${r.type}` as 'say.police') : null),
+    offerText: (savingS) => t('say.fasterRoute', { d: formatDuration(savingS, lang()) }),
     sendProbes: (fixes) => sendProbes(trip.probeToken, fixes),
+    checkEta: async (at) => {
+      const res = await tripEta(trip.tripId, at);
+      return { remainingS: res.remainingS, fasterRoute: res.fasterRoute, savingS: res.savingS };
+    },
     requestReroute: async (from) => {
       const [best] = await planRoutes(from, destination);
       return best ?? null;
@@ -133,13 +132,13 @@ export async function startDrive() {
 
   let source: NavLocationSource;
   try {
-    source = s.simulate ? startSimulated(route.polyline6, onFix) : await startNavGps(onFix);
+    source = settings().simulate && isDevBuild ? startSimulated(route.polyline6, onFix) : await startNavGps(onFix);
   } catch (e) {
     updateTrip(trip.tripId, { status: 'cancelled' }).catch(() => undefined);
-    toast(`Location unavailable: ${msg(e)}`);
+    toast(t('locationUnavailable', { e: msg(e) }));
     return;
   }
-  if (source.kind === 'gps-foreground') toast('Guidance pauses if you leave the app — allow location "Always" in Settings');
+  if (source.kind === 'gps-foreground') toast(t('allowAlways'));
 
   const unsubscribe: (() => void)[] = [];
   unsubscribe.push(session.subscribe((snap) => {
@@ -177,7 +176,7 @@ async function finish(how: 'arrived' | 'cancelled') {
     set({
       screen: 'arrived',
       arrival: {
-        name: s.destination?.name ?? 'your destination',
+        name: s.destination?.name ?? t('yourDestination'),
         distanceM: route?.distanceM ?? 0,
         durationS: route?.durationS ?? 0,
         arrivedAt: Date.now(),
@@ -197,11 +196,20 @@ export function closeArrival() {
   set({ screen: 'home', nav: null, arrival: null, destination: null, routes: [], selectedRouteId: null });
 }
 
-export function toggleMute() {
-  const muted = !get().muted;
-  if (muted) Speech.stop().catch(() => undefined);
-  set({ muted });
-  toast(muted ? 'Voice guidance muted' : 'Voice guidance on');
+export function toggleVoice() {
+  const voice = !settings().voice;
+  if (!voice) Speech.stop().catch(() => undefined);
+  setSetting('voice', voice);
+  toast(voice ? t('voiceOn') : t('voiceMuted'));
+}
+
+export function acceptFasterRoute() {
+  drive?.session.acceptOffer();
+  toast(t('switchedRoute'));
+}
+
+export function declineFasterRoute() {
+  drive?.session.declineOffer();
 }
 
 // ---------- community ----------
@@ -210,15 +218,15 @@ export async function report(type: ReportType) {
   set({ reportSheetOpen: false });
   const at = get().position ?? (isDevBuild ? { ...config.fallbackCenter, t: Date.now() } : null);
   if (!at) {
-    toast('Waiting for your location…');
+    toast(t('waitingLocation'));
     return;
   }
   try {
     const res = await createReport(type, at);
     upsertReport(res.report);
-    toast(res.merged ? `${reportLabels[type]} confirmed — thanks!` : `${reportLabels[type]} reported — thanks!`);
+    toast(res.merged ? t('confirmed', { type: typeLabel(type) }) : t('reported', { type: typeLabel(type) }));
   } catch (e) {
-    toast(e instanceof ApiError && e.status === 429 ? 'You’ve reported a lot recently — try again later' : msg(e));
+    toast(e instanceof ApiError && e.status === 429 ? t('tooManyReports') : msg(e));
   }
 }
 
@@ -229,7 +237,7 @@ export async function answerAlert(stillThere: boolean) {
   try {
     const res = await voteReport(alert.report.id, stillThere);
     if (res.status === 'expired') removeReport(alert.report.id);
-    toast(stillThere ? 'Thanks for confirming' : 'Thanks — we’ll update the map');
+    toast(stillThere ? t('thanksConfirm') : t('thanksUpdate'));
   } catch (e) {
     // 409 = already voted (e.g. you reported it yourself) — nothing to tell the driver
     if (!(e instanceof ApiError && e.status === 409)) toast(msg(e));

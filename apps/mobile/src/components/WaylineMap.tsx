@@ -2,10 +2,12 @@ import { Camera, GeoJSONSource, Layer, Map, Marker, type CameraRef, type LngLatB
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
+import type { RouteOption } from '@wayline/contracts';
 import { decodePolyline, RouteGeometry, type LatLng } from '@wayline/navigation-core';
 import { config } from '@/config';
 import { useApp } from '@/state/store';
-import { colors, reportColors, reportLabels } from '@/theme';
+import { useT } from '@/i18n';
+import { colors, reportColors } from '@/theme';
 
 export interface WaylineMapHandle {
   recenter(): void;
@@ -26,6 +28,7 @@ function boundsOf(points: LatLng[]): LngLatBounds {
  *  nav     — follow the snapped position, heading-up, tilted
  */
 export const WaylineMap = forwardRef<WaylineMapHandle>(function WaylineMap(_, ref) {
+  const { t } = useT();
   const camera = useRef<CameraRef>(null);
   const screen = useApp((s) => s.screen);
   const position = useApp((s) => s.position);
@@ -73,6 +76,29 @@ export const WaylineMap = forwardRef<WaylineMapHandle>(function WaylineMap(_, re
     return { type: 'FeatureCollection', features: [] };
   }, [screen, nav, routeGeo, routes, selectedId]);
 
+  // Slow / jammed stretches of the route being shown, from live traffic.
+  const shownRoute = screen === 'nav' ? (nav?.route as RouteOption | undefined) : routes.find((r) => r.id === selectedId);
+  const congestion = useMemo<GeoJSON.FeatureCollection>(() => {
+    const spans = shownRoute?.traffic?.congestion ?? [];
+    if (!shownRoute || spans.length === 0 || (screen !== 'nav' && screen !== 'preview')) return { type: 'FeatureCollection', features: [] };
+    const geo = new RouteGeometry(shownRoute.polyline6);
+    const k = shownRoute.distanceM > 0 ? geo.lengthM / shownRoute.distanceM : 1;
+    const from = screen === 'nav' ? (nav?.progress?.distanceAlongM ?? 0) : 0;
+    return {
+      type: 'FeatureCollection',
+      features: spans
+        .map((s) => ({ ...s, a: Math.max(s.fromM * k, from), b: s.toM * k }))
+        .filter((s) => s.b > s.a)
+        .map((s) => {
+          const coords: [number, number][] = [ll(geo.pointAt(s.a).point)];
+          const endIdx = geo.pointAt(s.b).segIndex;
+          for (let i = geo.pointAt(s.a).segIndex + 1; i <= endIdx; i++) coords.push(ll(geo.points[i]));
+          coords.push(ll(geo.pointAt(s.b).point));
+          return { type: 'Feature' as const, properties: { level: s.level }, geometry: { type: 'LineString' as const, coordinates: coords } };
+        }),
+    };
+  }, [shownRoute, screen, nav?.progress?.distanceAlongM]);
+
   const previewBounds = useMemo(() => {
     if (screen !== 'preview' || routes.length === 0) return null;
     return boundsOf(routes.flatMap((r) => decodePolyline(r.polyline6)));
@@ -108,6 +134,15 @@ export const WaylineMap = forwardRef<WaylineMapHandle>(function WaylineMap(_, re
         />
       </GeoJSONSource>
 
+      <GeoJSONSource id="congestion" data={congestion}>
+        <Layer
+          id="congestion-line"
+          type="line"
+          layout={{ 'line-join': 'round', 'line-cap': 'round' }}
+          paint={{ 'line-color': ['match', ['get', 'level'], 'jam', colors.danger, '#EA580C'], 'line-width': 8 }}
+        />
+      </GeoJSONSource>
+
       {destination && screen !== 'home' && screen !== 'search' ? (
         <Marker id="destination" lngLat={ll(destination)} anchor="bottom">
           <Svg width={34} height={34} viewBox="0 0 24 24" accessibilityLabel="Destination">
@@ -119,8 +154,8 @@ export const WaylineMap = forwardRef<WaylineMapHandle>(function WaylineMap(_, re
 
       {Object.values(reports).map((r) => (
         <Marker key={r.id} id={`report-${r.id}`} lngLat={[r.lng, r.lat]} anchor="bottom">
-          <View style={[styles.pill, { backgroundColor: reportColors[r.type] ?? colors.sub }]} accessibilityLabel={`${reportLabels[r.type]} report`}>
-            <Text style={styles.pillText}>{reportLabels[r.type] ?? r.type}</Text>
+          <View style={[styles.pill, { backgroundColor: reportColors[r.type] ?? colors.sub }]} accessibilityLabel={t('type.' + r.type as 'type.police')}>
+            <Text style={styles.pillText}>{t(`type.${r.type}` as 'type.police')}</Text>
           </View>
         </Marker>
       ))}

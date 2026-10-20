@@ -37,12 +37,19 @@ async function main() {
 
   const said: string[] = [];
   let probesSent = 0;
+  let etaChecks = 0;
+  const limits = new Set<number | null>();
   let now = Date.now();
   const session = new NavigationSession<Report>(route, dest, {
     now: () => now,
     speak: (t) => said.push(t),
     alertText: (r) => (r.type === 'police' ? 'Police reported ahead' : null),
     requestReroute: async () => null,
+    checkEta: async (at) => {
+      etaChecks++;
+      const r = ok(await api.POST('/v1/trips/{id}/eta', { params: { path: { id: trip.tripId } }, body: { lat: at.lat, lng: at.lng } }), 'eta');
+      return { remainingS: r.remainingS, fasterRoute: r.fasterRoute, savingS: r.savingS };
+    },
     sendProbes: async (fixes: Fix[]) => {
       const { response } = await api.POST('/v1/probes', { body: { probeToken: trip.probeToken, fixes: fixes.map((f) => ({ t: Math.round(f.t), lat: f.lat, lng: f.lng, speed: f.speed ?? undefined, heading: f.heading ?? undefined, acc: f.acc ?? undefined })) } });
       if (response.ok) { probesSent += fixes.length; return 'ok'; }
@@ -57,6 +64,7 @@ async function main() {
   for (let i = 0; i < 2000 && session.snapshot.phase !== 'arrived'; i++) {
     now += 1000;
     const snap = await session.onFix(sim.step(now));
+    limits.add(snap.progress?.speedLimitKmh ?? null);
     if (snap.alert && !alerted) {
       alerted = snap.alert.report.id;
       const vote = ok(await api.POST('/v1/reports/{id}/votes', { params: { path: { id: alerted } }, body: { stillThere: true } }), 'vote');
@@ -69,8 +77,9 @@ async function main() {
 
   console.log(`route: ${routes.length} options, ${route.distanceM} m, ${Math.round(route.durationS / 60)} min → ${dest.name}`);
   console.log('spoken:\n  ' + said.join('\n  '));
+  console.log(`eta checks: ${etaChecks} · speed limits seen: ${[...limits].join(', ')}`);
   console.log(`probes uploaded: ${probesSent} fixes · alert for police: ${alerted === police.id} · trip: ${done.status} · phase: ${session.snapshot.phase}`);
-  if (session.snapshot.phase !== 'arrived' || alerted !== police.id || probesSent === 0) process.exit(1);
+  if (session.snapshot.phase !== 'arrived' || alerted !== police.id || probesSent === 0 || etaChecks === 0 || !limits.has(50)) process.exit(1);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

@@ -61,6 +61,7 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npm test -w @wayline/navigation-core
+      - run: npm test -w @wayline/mobile
       - run: npm run typecheck -w @wayline/mobile
       - run: npm run lint -w @wayline/mobile
       - name: JS bundles build for both platforms

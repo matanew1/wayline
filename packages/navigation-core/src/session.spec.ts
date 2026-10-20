@@ -103,3 +103,58 @@ describe('NavigationSession', () => {
     expect(haversineM(session.snapshot.progress!.raw, dest)).toBeLessThan(40);
   });
 });
+
+describe('NavigationSession — live ETA, faster routes, speed limits', () => {
+  /** let pending promise chains (the async ETA check) settle — no timers in this platform-free package */
+  const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
+
+  it('applies the server ETA correction and offers a faster route once', async () => {
+    let calls = 0;
+    const faster = makeRoute(undefined, undefined, ['Fast St', 'Quick Rd', 'Swift Ave', ''], 20, 'rt_fast');
+    const ctx = setup({
+      checkEta: async () => { calls++; return { remainingS: 400, fasterRoute: faster, savingS: 240 }; },
+      offerText: (s) => `Faster route found, saves ${Math.round(s / 60)} minutes`,
+    });
+    const { session, said, tick, now } = ctx;
+    const sim = new RouteSimulator(route.polyline6, { speedMs: 12 });
+    tick(); await session.onFix(sim.step(now())); await flush();
+    expect(calls).toBe(1);
+    expect(session.snapshot.offer?.route.id).toBe('rt_fast');
+    expect(said.map((s) => s.text)).toContain('Faster route found, saves 4 minutes');
+
+    tick(); const s = await session.onFix(sim.step(now()));
+    // local estimate ≈ 160 s → server says 400 s → factor ≈ 2.5 applied to the displayed remaining time
+    expect(s.remainingS!).toBeGreaterThan(s.progress!.durationRemainingS * 2);
+
+    // no second check before the interval
+    for (let i = 0; i < 30; i++) { tick(); await session.onFix(sim.step(now())); }
+    expect(calls).toBe(1);
+
+    session.acceptOffer();
+    expect(session.snapshot.route.id).toBe('rt_fast');
+    expect(session.snapshot.offer).toBeNull();
+    expect(session.snapshot.reroutes).toBe(1);
+  });
+
+  it('does not re-offer a declined route during the cooldown', async () => {
+    const faster = makeRoute(undefined, undefined, undefined, 20, 'rt_fast');
+    const ctx = setup({ checkEta: async () => ({ remainingS: 300, fasterRoute: faster, savingS: 200 }) });
+    const { session, tick, now } = ctx;
+    const sim = new RouteSimulator(route.polyline6, { speedMs: 4 });
+    tick(); await session.onFix(sim.step(now())); await flush();
+    session.declineOffer();
+    for (let i = 0; i < 70; i++) { tick(); await session.onFix(sim.step(now())); await flush(); }
+    expect(session.snapshot.offer).toBeNull(); // a check ran at +60 s but was suppressed
+  });
+
+  it('reports the posted speed limit along the route', async () => {
+    const limited = { ...route, speedLimits: [{ fromM: 0, toM: 600, kmh: 50 }, { fromM: 600, toM: 1400, kmh: 30 }] };
+    const session = new NavigationSession(limited, dest, { now: () => 0, speak: () => undefined, requestReroute: async () => null });
+    const sim = new RouteSimulator(limited.polyline6, { speedMs: 10 });
+    const seen = new Set<number | null>();
+    for (let t = 1000; session.snapshot.phase !== 'arrived' && t < 400_000; t += 1000) {
+      seen.add((await session.onFix(sim.step(t))).progress?.speedLimitKmh ?? null);
+    }
+    expect([...seen]).toEqual([50, 30, null]);
+  });
+});

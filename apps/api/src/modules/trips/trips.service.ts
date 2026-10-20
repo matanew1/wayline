@@ -7,10 +7,16 @@ import { CLOCK, Clock, KV, PROBE_SINK, TRIPS_REPO } from '../../common/tokens';
 import { Metrics } from '../../observability/metrics';
 import { RoutingService } from '../routing/routing.service';
 import type { ProbeSink } from './probe-sink';
-import type { ProbeBatchDto, ProbesAcceptedDto, TripDto, TripStartedDto, UpdateTripDto } from './trips.dto';
+import { decodePolyline, nearestSegment, type LatLng } from '../../common/geo';
+import { edgeAtShapeIndex } from '../routing/traffic.pricing';
+import type { EtaDto, ProbeBatchDto, ProbesAcceptedDto, TripDto, TripStartedDto, UpdateTripDto } from './trips.dto';
 import type { Trip, TripsRepository } from './trips.repository';
 
 export const PROBE_TOKEN_TTL_S = 12 * 3600;
+/** Suggest a new route only when it saves at least this much. */
+export const FASTER_ROUTE_MIN_SAVING_S = 180;
+/** Don't look for alternatives in the last few minutes of a drive. */
+const MIN_REMAINING_FOR_ALTERNATIVES_S = 300;
 /** Fixes worse than this are useless for map-matching. */
 export const MAX_FIX_ACCURACY_M = 50;
 const MAX_FIX_AGE_MS = 15 * 60_000;
@@ -69,6 +75,33 @@ export class TripsService {
       if (token) await Promise.all([this.kv.del(`probe:${token}`), this.kv.del(`trip:probe:${tripId}`)]);
     }
     return toDto(await this.trips.update(tripId, changes));
+  }
+
+  /**
+   * Live ETA for an active trip, plus a faster route if traffic makes one worthwhile.
+   * The app calls this about once a minute; the position is used and discarded.
+   */
+  async eta(userId: string, tripId: string, pos: LatLng): Promise<EtaDto> {
+    const trip = await this.trips.findForUser(userId, tripId);
+    if (!trip) throw new NotFoundException('Trip not found');
+    if (trip.status !== 'active') throw new ConflictException(`Trip is already ${trip.status}`);
+    const route = await this.routeOr404(trip.routeId);
+
+    const shape = decodePolyline(route.polyline6);
+    const near = nearestSegment(shape, pos);
+    const priced = route.edges ? await this.routing.remainingFrom(route, edgeAtShapeIndex(route.edges, near.index)) : null;
+    // without edges, fall back to the router's estimate scaled by the share of the shape left
+    const remainingS = priced?.durationS ?? Math.round(route.durationS * (1 - near.index / Math.max(1, shape.length - 1)));
+    const out: EtaDto = { remainingS, offRouteM: Math.round(near.offsetM), liveEdges: priced?.liveEdges ?? 0 };
+
+    if (remainingS >= MIN_REMAINING_FOR_ALTERNATIVES_S) {
+      const [best] = await this.routing.plan({ origin: { lat: pos.lat, lng: pos.lng }, destination: route.destination }).catch(() => []);
+      if (best && remainingS - best.durationS >= FASTER_ROUTE_MIN_SAVING_S) {
+        out.fasterRoute = best;
+        out.savingS = remainingS - best.durationS;
+      }
+    }
+    return out;
   }
 
   async ingestProbes(batch: ProbeBatchDto): Promise<ProbesAcceptedDto> {

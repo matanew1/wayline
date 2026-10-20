@@ -177,6 +177,46 @@ describe('Wayline API (in-memory drivers)', () => {
     });
   });
 
+  describe('live traffic', () => {
+    it('adds speed limits, re-ranks by live speeds and suggests faster routes mid-trip', async () => {
+      const { TRAFFIC_STORE } = await import('../src/modules/routing/routing.tokens');
+      const { ROUTING_ENGINE } = await import('../src/common/tokens');
+      const traffic = app.get(TRAFFIC_STORE);
+      const engine = app.get(ROUTING_ENGINE);
+      const { token } = await guestToken(app);
+      const body = { origin: { lat: 32.3, lng: 34.85 }, destination: { lat: 32.32, lng: 34.88 } };
+
+      const first = await request(http).post('/v1/routes').set(auth(token)).send(body).expect(200);
+      expect(first.body[0].speedLimits[0]).toMatchObject({ fromM: 0, kmh: 50 });
+      expect(first.body[0].traffic).toMatchObject({ liveEdges: 0, congestion: [] });
+      const fastestFreeFlow = first.body[0];
+
+      // jam the free-flow fastest route
+      for (const e of await engine.edges(fastestFreeFlow.polyline6)) {
+        await traffic.setSpeed(e.id, { kmh: 5, samples: 12, updatedAt: clock.now() });
+      }
+      const second = await request(http).post('/v1/routes').set(auth(token)).send(body).expect(200);
+      expect(second.body[0].polyline6).not.toBe(fastestFreeFlow.polyline6);
+      const jammed = second.body.find((r: any) => r.polyline6 === fastestFreeFlow.polyline6);
+      expect(jammed.durationS).toBeGreaterThan(fastestFreeFlow.durationS * 3);
+      expect(jammed.traffic.congestion[0].level).toBe('jam');
+
+      // driving the jammed route → the ETA check offers the other one
+      const trip = await request(http).post('/v1/trips').set(auth(token)).send({ routeId: jammed.id }).expect(201);
+      const eta = await request(http).post(`/v1/trips/${trip.body.tripId}/eta`).set(auth(token)).send(body.origin).expect(200);
+      expect(eta.body.remainingS).toBeGreaterThan(jammed.durationS * 0.9);
+      expect(eta.body.liveEdges).toBeGreaterThan(0);
+      expect(eta.body.fasterRoute.polyline6).not.toBe(jammed.polyline6);
+      expect(eta.body.savingS).toBeGreaterThanOrEqual(180);
+      expect(eta.body.offRouteM).toBeLessThan(5);
+
+      // and switching to it is a normal reroute
+      await request(http).patch(`/v1/trips/${trip.body.tripId}`).set(auth(token)).send({ routeId: eta.body.fasterRoute.id }).expect(200);
+      const after = await request(http).post(`/v1/trips/${trip.body.tripId}/eta`).set(auth(token)).send(body.origin).expect(200);
+      expect(after.body.fasterRoute).toBeUndefined();
+    });
+  });
+
   describe('trust score', () => {
     it('rises when others confirm a report and falls when it is voted away', async () => {
       const { USERS_REPO } = await import('../src/common/tokens');

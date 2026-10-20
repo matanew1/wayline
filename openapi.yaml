@@ -260,6 +260,32 @@ paths:
         - bearer: []
       tags:
         - trips
+  /v1/trips/{id}/eta:
+    post:
+      operationId: TripsController_eta
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EtaRequestDto'
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EtaDto'
+      security:
+        - bearer: []
+      tags:
+        - trips
   /v1/probes:
     post:
       operationId: TripsController_probes
@@ -610,6 +636,56 @@ components:
         - distanceM
         - durationS
         - beginShapeIndex
+    SpeedLimitSpanDto:
+      type: object
+      properties:
+        fromM:
+          type: number
+          description: metres along the route
+        toM:
+          type: number
+        kmh:
+          type: number
+      required:
+        - fromM
+        - toM
+        - kmh
+    CongestionSpanDto:
+      type: object
+      properties:
+        fromM:
+          type: number
+        toM:
+          type: number
+        level:
+          type: string
+          enum:
+            - slow
+            - jam
+      required:
+        - fromM
+        - toM
+        - level
+    RouteTrafficDto:
+      type: object
+      properties:
+        baseDurationS:
+          type: number
+          description: Duration without live traffic
+        liveEdges:
+          type: number
+          description: Edges priced with live speeds
+        totalEdges:
+          type: number
+        congestion:
+          type: array
+          items:
+            $ref: '#/components/schemas/CongestionSpanDto'
+      required:
+        - baseDurationS
+        - liveEdges
+        - totalEdges
+        - congestion
     RouteOptionDto:
       type: object
       properties:
@@ -640,6 +716,16 @@ components:
           type: array
           items:
             type: string
+        speedLimits:
+          description: Posted limits along the route (gaps = unknown)
+          type: array
+          items:
+            $ref: '#/components/schemas/SpeedLimitSpanDto'
+        traffic:
+          nullable: true
+          description: null when edge data was unavailable
+          allOf:
+            - $ref: '#/components/schemas/RouteTrafficDto'
       required:
         - id
         - polyline6
@@ -648,6 +734,8 @@ components:
         - maneuvers
         - flags
         - cells
+        - speedLimits
+        - traffic
     StartTripDto:
       type: object
       properties:
@@ -709,6 +797,38 @@ components:
         - status
         - distanceM
         - startedAt
+    EtaRequestDto:
+      type: object
+      properties:
+        lat:
+          type: number
+          description: Current position. Used for this calculation only — not stored.
+        lng:
+          type: number
+      required:
+        - lat
+        - lng
+    EtaDto:
+      type: object
+      properties:
+        remainingS:
+          type: number
+          description: Traffic-adjusted time left on the current route
+        offRouteM:
+          type: number
+          description: Distance from the route; large values mean the driver is off route
+        liveEdges:
+          type: number
+        fasterRoute:
+          description: Present when a route at least FASTER_ROUTE_MIN_SAVING_S faster exists
+          allOf:
+            - $ref: '#/components/schemas/RouteOptionDto'
+        savingS:
+          type: number
+      required:
+        - remainingS
+        - offRouteM
+        - liveEdges
     ProbeFixDto:
       type: object
       properties:

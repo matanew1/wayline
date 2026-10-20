@@ -36,6 +36,7 @@ describe('routing engines', () => {
     expect(body.costing_options.auto.use_tolls).toBe(0);
     expect(body.language).toBe('he-IL');
     expect(body.alternates).toBe(2);
+    expect(body.directions_type).toBe('instructions');
     fetchMock.mockRestore();
   });
 

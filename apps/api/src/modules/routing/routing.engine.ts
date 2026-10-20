@@ -1,5 +1,6 @@
 import { BadGatewayException, Logger } from '@nestjs/common';
-import { bearingDeg, encodePolyline, haversineM, headingDiff, LatLng } from '../../common/geo';
+import { bearingDeg, decodePolyline, encodePolyline, haversineM, headingDiff, LatLng } from '../../common/geo';
+import type { RouteEdge } from './traffic.pricing';
 import type { AvoidOption, ManeuverDto, ManeuverKind, RouteFlag } from './routing.dto';
 
 export interface RouteQuery {
@@ -21,6 +22,21 @@ export interface EngineRoute {
 export interface RoutingEngine {
   /** Best route first, up to 3. Empty array = no route exists. */
   route(q: RouteQuery): Promise<EngineRoute[]>;
+  /** The road edges along a route shape (for live traffic pricing and speed limits). */
+  edges(polyline6: string): Promise<RouteEdge[]>;
+}
+
+export function mapTraceEdges(json: any): RouteEdge[] {
+  return (json.edges ?? []).map((e: any) => ({
+    id: String(e.id),
+    wayId: typeof e.way_id === 'number' ? e.way_id : null,
+    lengthM: Math.round((e.length ?? 0) * 1000),
+    // Valhalla reports 0 (or omits it) when the limit is unknown
+    speedLimitKmh: typeof e.speed_limit === 'number' && e.speed_limit > 0 ? e.speed_limit : null,
+    freeFlowKmh: e.speed ?? 0,
+    beginShapeIndex: e.begin_shape_index,
+    endShapeIndex: e.end_shape_index,
+  }));
 }
 
 // ---------- Valhalla ----------
@@ -84,7 +100,8 @@ export class ValhallaEngine implements RoutingEngine {
       alternates: 2,
       units: 'kilometers',
       language: q.language === 'he' ? 'he-IL' : 'en-US',
-      directions_type: 'maneuvers',
+      // 'maneuvers' would omit the instruction text entirely (verified against Valhalla 3.9)
+      directions_type: 'instructions',
     };
     let res: Response;
     try {
@@ -108,6 +125,26 @@ export class ValhallaEngine implements RoutingEngine {
     const trips = [json.trip, ...(json.alternates ?? []).map((a: any) => a.trip)].filter(Boolean);
     return trips.slice(0, 3).map(mapValhallaTrip);
   }
+
+  async edges(polyline6: string): Promise<RouteEdge[]> {
+    const res = await fetch(`${this.baseUrl}/trace_attributes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        encoded_polyline: polyline6,
+        // the shape came from Valhalla itself, so walk its edges exactly rather than map-matching
+        shape_match: 'edge_walk',
+        costing: 'auto',
+        filters: {
+          attributes: ['edge.id', 'edge.way_id', 'edge.length', 'edge.speed', 'edge.speed_limit', 'edge.begin_shape_index', 'edge.end_shape_index'],
+          action: 'include',
+        },
+      }),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    if (!res.ok) throw new Error(`trace_attributes HTTP ${res.status}`);
+    return mapTraceEdges(await res.json());
+  }
 }
 
 // ---------- Mock (dev/tests, no map data needed) ----------
@@ -122,6 +159,21 @@ function turnKind(fromBearing: number, toBearing: number): ManeuverKind {
 
 /** Two L-shaped routes through the corners of the origin/destination box. */
 export class MockRoutingEngine implements RoutingEngine {
+  /** One edge per polyline segment, id derived from its endpoints (stable, so tests can set speeds). */
+  async edges(polyline6: string): Promise<RouteEdge[]> {
+    const pts = decodePolyline(polyline6);
+    const key = (p: LatLng) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`;
+    return pts.slice(1).map((b, i) => ({
+      id: `mock:${key(pts[i])}>${key(b)}`,
+      wayId: null,
+      lengthM: Math.round(haversineM(pts[i], b)),
+      speedLimitKmh: 50,
+      freeFlowKmh: MOCK_SPEED_MS * 3.6,
+      beginShapeIndex: i,
+      endShapeIndex: i + 1,
+    }));
+  }
+
   async route(q: RouteQuery): Promise<EngineRoute[]> {
     if (haversineM(q.origin, q.destination) < 5) return [];
     const corners: LatLng[] = [

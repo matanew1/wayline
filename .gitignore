@@ -11,3 +11,4 @@ apps/mobile/ios/
 apps/mobile/dist-check/
 apps/mobile/expo-env.d.ts
 packages/*/dist/
+.valhalla-test/

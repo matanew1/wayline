@@ -1,0 +1,46 @@
+export interface LatLng {
+  lat: number;
+  lng: number;
+}
+
+/** One GPS reading. speed in m/s, heading in degrees (0 = north), acc in metres. */
+export interface Fix {
+  t: number;
+  lat: number;
+  lng: number;
+  speed?: number | null;
+  heading?: number | null;
+  acc?: number | null;
+}
+
+/** Structurally identical to the API's ManeuverDto. */
+export interface RouteManeuver {
+  kind: string;
+  instruction: string;
+  streetNames: string[];
+  distanceM: number;
+  durationS: number;
+  beginShapeIndex: number;
+}
+
+/** Structurally identical to the API's RouteOptionDto. */
+export interface NavRoute {
+  id: string;
+  polyline6: string;
+  durationS: number;
+  distanceM: number;
+  maneuvers: RouteManeuver[];
+  flags: string[];
+  cells: string[];
+}
+
+/** Anything with a position — reports from the API fit. */
+export interface ReportLike {
+  id: string;
+  type: string;
+  lat: number;
+  lng: number;
+  heading: number | null;
+}
+
+export type Language = 'en' | 'he';

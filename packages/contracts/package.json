@@ -4,7 +4,7 @@
   "private": true,
   "description": "Typed API contract + client for Wayline apps, generated from openapi.yaml",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "types": "src/index.ts",
   "scripts": {
     "generate": "openapi-typescript ../../openapi.yaml -o src/schema.ts",
     "build": "tsc -p tsconfig.json",
@@ -16,5 +16,6 @@
   "devDependencies": {
     "openapi-typescript": "7.9.1",
     "typescript": "5.9.2"
-  }
+  },
+  "react-native": "src/index.ts"
 }

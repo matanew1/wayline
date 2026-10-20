@@ -41,6 +41,24 @@ jobs:
           git diff --exit-code -- openapi.yaml packages/contracts/src/schema.ts \
             || (echo "::error::API changed — run 'npm run openapi' and commit the result" && exit 1)
 
+  mobile:
+    runs-on: ubuntu-latest
+    env: { EXPO_NO_TELEMETRY: "1" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm test -w @wayline/navigation-core
+      - run: npm run typecheck -w @wayline/mobile
+      - run: npm run lint -w @wayline/mobile
+      - name: JS bundles build for both platforms
+        run: npm run bundle:check -w @wayline/mobile
+      - name: Expo dependency check
+        run: npx expo-doctor
+        working-directory: apps/mobile
+        continue-on-error: true
+
   image:
     needs: test
     runs-on: ubuntu-latest

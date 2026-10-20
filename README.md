@@ -1,13 +1,18 @@
-# Wayline — backend (Phase 0)
+# Wayline
 
 Community-powered navigation: routes with live ETAs, turn-by-turn guidance and crowd reports
-(police, crashes, hazards, closures). This repo is the **API + realtime gateway + infra** that the
-mobile app talks to. The product scope, screens and architecture decisions are on the design canvas
-("Engineering handoff" artboard).
+(police, crashes, hazards, closures). The product scope, screens and architecture decisions are on
+the design canvas ("Engineering handoff" artboard).
+
+- **Phase 0 — backend:** API, realtime gateway, infra (below)
+- **Phase 1 — Drive A→B:** the mobile app + platform-free navigation engine ([Mobile app](#mobile-app))
 
 ```
-apps/api              NestJS 11 API (REST + Socket.IO), TypeScript
-packages/contracts    Types + typed fetch client generated from openapi.yaml (for the React Native app)
+apps/api                  NestJS 11 API (REST + Socket.IO), TypeScript
+apps/mobile               Expo SDK 58 / React Native 0.88 driver app (MapLibre, background GPS, voice)
+packages/navigation-core  Guidance engine: route tracking, voice timing, rerouting, report alerts, probe upload, simulator
+packages/contracts        Types + typed fetch client generated from openapi.yaml
+scripts/sim-drive.ts      Headless end-to-end drive against a running API
 infra/sql             Forward-only SQL migrations (PostGIS)
 infra/k8s             Kustomize base + Minikube overlay
 openapi.yaml          Generated API contract — CI fails if it drifts from the code
@@ -88,6 +93,45 @@ const api = createWaylineClient(API, () => tokens.access);
 const { data: routes } = await api.POST('/v1/routes', { body: { origin, destination } });
 ```
 
+## Mobile app
+
+Expo with Continuous Native Generation: `android/` and `ios/` are generated from `app.config.ts`
+(never committed). MapLibre and background location need native code, so use a **development
+build**, not Expo Go.
+
+```bash
+npm install
+npm run dev                                  # API on :3000 (in-memory), in another terminal:
+cd apps/mobile
+npx expo run:android                         # or run:ios — builds the dev client once, then fast refresh
+# physical phone: EXPO_PUBLIC_API_URL=http://<your-LAN-IP>:3000 npx expo start
+```
+
+Without driving anywhere: open a route preview, switch on **Simulate drive (dev)** and tap Go —
+the simulator feeds the same `NavigationSession` the GPS does. `npm run sim:drive` does the whole
+flow headless (auth → search → route → trip → guidance → police alert → vote → probes → arrival).
+
+**How a drive works** (`src/nav/drive.ts`):
+
+1. `POST /routes` → preview with up to 3 alternatives → `POST /trips` returns a probe token
+2. `NavigationSession` (from `@wayline/navigation-core`) gets 1 Hz fixes from background location
+   (Android foreground service / iOS `location` background mode) or the simulator
+3. Per fix it snaps to the route, updates maneuver/ETA, speaks guidance at ~400 m / ~10 s / at the turn
+   (2 km / 1 km at highway speed), raises alerts for reports ahead within a speed-scaled window,
+   and batches probes (first/last 300 m trimmed on the device, backoff on 503, stop on 401)
+4. Off-route for 3 consecutive fixes → reroute (≥ 10 s apart) → `PATCH /trips/:id` with the new route,
+   realtime subscription moves to the new route's cells
+5. Arrival → `PATCH /trips/:id {status: finished}`
+
+| Builds (`eas.json`) | `APP_VARIANT` | Notes |
+|---|---|---|
+| `development` | development | dev client, `com.wayline.app.dev`, cleartext HTTP allowed for a local API |
+| `preview` | preview | internal distribution, staging API |
+| `production` | production | store build; set `EXPO_PUBLIC_API_URL` |
+
+Map tiles default to OpenFreeMap (free, no key) — set `EXPO_PUBLIC_MAP_STYLE_URL` to your own
+PMTiles style for production.
+
 ## Deploy
 
 - Image: `docker build -f apps/api/Dockerfile .` (non-root, healthcheck, migrations baked in at `/app/sql`)
@@ -97,6 +141,17 @@ const { data: routes } = await api.POST('/v1/routes', { body: { origin, destinat
   containers → build → OpenAPI drift check → image build (pushed to GHCR on `main`).
 
 ## Not built yet (next phases)
+
+Mobile:
+- **Not yet run on a device** — verified by typecheck, lint, Metro bundles for both platforms, native
+  config generation, core tests and the headless drive. First real-device pass: map rendering,
+  background guidance with the screen off, audio ducking, Android 14 foreground-service behaviour.
+- **Phone sign-in screen** — `requestOtp` / `verifyOtp` exist in `src/api/auth.ts`; the app runs as a guest.
+- **Speed limits** — the speed bubble shows current speed only (needs a speed-limit source, e.g. Valhalla `trace_attributes`).
+- **Hebrew UI / RTL** — the guidance engine speaks Hebrew (`language: 'he'`); UI strings aren't localised yet.
+- **Recents persistence**, settings screen, CarPlay / Android Auto (v1.1).
+
+Backend:
 
 - **SMS provider** — `LogSmsSender` only logs the code. Implement `SmsSender` for Twilio/Vonage/SNS.
 - **Traffic pipeline (Phase 3)** — consumer of `probes.raw` → Valhalla Meili map-matching → edge

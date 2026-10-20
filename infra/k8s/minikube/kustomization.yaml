@@ -1,0 +1,32 @@
+# Local cluster:
+#   minikube start && eval $(minikube docker-env)
+#   docker build -f apps/api/Dockerfile -t wayline-api:dev .
+#   kubectl create namespace wayline
+#   kubectl -n wayline create secret generic wayline-api \
+#     --from-literal=JWT_SECRET=$(openssl rand -hex 32) --from-literal=PHONE_PEPPER=$(openssl rand -hex 16) \
+#     --from-literal=DATABASE_URL=postgres://wayline:wayline@postgres:5432/wayline --from-literal=REDIS_URL=redis://redis:6379
+#   kubectl apply -k infra/k8s/minikube
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: wayline
+resources:
+  - ../base
+  - deps.yaml
+images:
+  - name: wayline-api
+    newName: wayline-api
+    newTag: dev
+patches:
+  - target: { kind: Deployment, name: wayline-api }
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
+  - target: { kind: HorizontalPodAutoscaler, name: wayline-api }
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 1

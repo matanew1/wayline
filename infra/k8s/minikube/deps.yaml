@@ -1,0 +1,67 @@
+# Dev-only single-instance dependencies. In production use managed Postgres (with PostGIS),
+# managed Redis and a Kafka/Redpanda cluster instead.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: postgres }
+spec:
+  selector: { matchLabels: { app: postgres } }
+  template:
+    metadata: { labels: { app: postgres } }
+    spec:
+      containers:
+        - name: postgres
+          image: postgis/postgis:16-3.4
+          env:
+            - { name: POSTGRES_USER, value: wayline }
+            - { name: POSTGRES_PASSWORD, value: wayline }
+            - { name: POSTGRES_DB, value: wayline }
+          ports: [{ containerPort: 5432 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: postgres }
+spec:
+  selector: { app: postgres }
+  ports: [{ port: 5432 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: redis }
+spec:
+  selector: { matchLabels: { app: redis } }
+  template:
+    metadata: { labels: { app: redis } }
+    spec:
+      containers:
+        - name: redis
+          image: redis:7.4-alpine
+          ports: [{ containerPort: 6379 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: redis }
+spec:
+  selector: { app: redis }
+  ports: [{ port: 6379 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: redpanda }
+spec:
+  selector: { matchLabels: { app: redpanda } }
+  template:
+    metadata: { labels: { app: redpanda } }
+    spec:
+      containers:
+        - name: redpanda
+          image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+          args: ["redpanda", "start", "--mode", "dev-container", "--smp", "1",
+                 "--kafka-addr", "0.0.0.0:9092", "--advertise-kafka-addr", "redpanda:9092"]
+          ports: [{ containerPort: 9092 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: redpanda }
+spec:
+  selector: { app: redpanda }
+  ports: [{ port: 9092 }]

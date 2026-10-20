@@ -1,0 +1,862 @@
+openapi: 3.0.0
+paths:
+  /health/live:
+    get:
+      operationId: HealthController_live
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      tags:
+        - health
+  /health:
+    get:
+      operationId: HealthController_ready
+      parameters: []
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthDto'
+      tags:
+        - health
+  /v1/auth/otp:
+    post:
+      operationId: AuthController_requestOtp
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestOtpDto'
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OtpRequestedDto'
+      tags:
+        - auth
+  /v1/auth/verify:
+    post:
+      operationId: AuthController_verify
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyOtpDto'
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPairDto'
+      tags:
+        - auth
+  /v1/auth/guest:
+    post:
+      operationId: AuthController_guest
+      parameters: []
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPairDto'
+      tags:
+        - auth
+  /v1/auth/refresh:
+    post:
+      operationId: AuthController_refresh
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshDto'
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPairDto'
+      tags:
+        - auth
+  /v1/places/search:
+    get:
+      operationId: PlacesController_search
+      parameters:
+        - name: q
+          required: true
+          in: query
+          schema:
+            example: city hall
+            type: string
+        - name: lat
+          required: false
+          in: query
+          description: Bias results near this point
+          schema:
+            type: number
+        - name: lng
+          required: false
+          in: query
+          schema:
+            type: number
+        - name: lang
+          required: false
+          in: query
+          schema:
+            default: en
+            type: string
+            enum:
+              - he
+              - en
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlaceDto'
+      security:
+        - bearer: []
+      tags:
+        - places
+  /v1/me/places:
+    get:
+      operationId: PlacesController_list
+      parameters: []
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SavedPlaceDto'
+      security:
+        - bearer: []
+      tags:
+        - places
+    put:
+      operationId: PlacesController_save
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SavePlaceDto'
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedPlaceDto'
+      security:
+        - bearer: []
+      tags:
+        - places
+  /v1/me/places/{id}:
+    delete:
+      operationId: PlacesController_remove
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '204':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - places
+  /v1/routes:
+    post:
+      operationId: RoutingController_plan
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteRequestDto'
+      responses:
+        '200':
+          description: Best route first, up to 3
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RouteOptionDto'
+        '404':
+          description: No route between the points
+      security:
+        - bearer: []
+      tags:
+        - routes
+  /v1/trips:
+    post:
+      operationId: TripsController_start
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartTripDto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripStartedDto'
+      security:
+        - bearer: []
+      tags:
+        - trips
+  /v1/trips/{id}:
+    patch:
+      operationId: TripsController_update
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTripDto'
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripDto'
+      security:
+        - bearer: []
+      tags:
+        - trips
+  /v1/probes:
+    post:
+      operationId: TripsController_probes
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbeBatchDto'
+      responses:
+        '202':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbesAcceptedDto'
+      tags:
+        - trips
+  /v1/reports:
+    post:
+      operationId: ReportsController_create
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportDto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportCreatedDto'
+      security:
+        - bearer: []
+      tags:
+        - reports
+  /v1/reports/{id}/votes:
+    post:
+      operationId: ReportsController_vote
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoteDto'
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteResultDto'
+      security:
+        - bearer: []
+      tags:
+        - reports
+  /v1/reports/nearby:
+    get:
+      operationId: ReportsController_nearby
+      parameters:
+        - name: lat
+          required: true
+          in: query
+          schema:
+            type: number
+        - name: lng
+          required: true
+          in: query
+          schema:
+            type: number
+        - name: radiusM
+          required: false
+          in: query
+          schema:
+            maximum: 20000
+            default: 5000
+            type: number
+      responses:
+        '200':
+          description: Initial load; live updates come over the realtime gateway
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReportDto'
+      security:
+        - bearer: []
+      tags:
+        - reports
+info:
+  title: Wayline API
+  description: 'Community-powered navigation. Realtime events: Socket.IO namespace /rt (see RealtimeGateway).'
+  version: 0.1.0
+  contact: {}
+tags: []
+servers: []
+components:
+  securitySchemes:
+    bearer:
+      scheme: bearer
+      bearerFormat: JWT
+      type: http
+  schemas:
+    HealthDto:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+        storeDriver:
+          type: string
+        routingDriver:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+      required:
+        - status
+        - storeDriver
+        - routingDriver
+        - checks
+    RequestOtpDto:
+      type: object
+      properties:
+        phone:
+          type: string
+          example: '+972501234567'
+          description: E.164 phone number
+      required:
+        - phone
+    OtpRequestedDto:
+      type: object
+      properties:
+        sentTo:
+          type: string
+          example: +97250•••4567
+        expiresInS:
+          type: number
+          example: 300
+        devCode:
+          type: string
+          description: Only when OTP_DEV_ECHO=true (never in production)
+      required:
+        - sentTo
+        - expiresInS
+    VerifyOtpDto:
+      type: object
+      properties:
+        phone:
+          type: string
+          example: '+972501234567'
+          description: E.164 phone number
+        code:
+          type: string
+          example: '123456'
+      required:
+        - phone
+        - code
+    TokenPairDto:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresInS:
+          type: number
+          example: 900
+        userId:
+          type: string
+        guest:
+          type: boolean
+      required:
+        - accessToken
+        - refreshToken
+        - expiresInS
+        - userId
+        - guest
+    RefreshDto:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+      required:
+        - refreshToken
+    PlaceDto:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+        distanceM:
+          type: number
+          description: Straight-line distance from the bias point
+      required:
+        - id
+        - name
+        - address
+        - lat
+        - lng
+    SavedPlaceDto:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum:
+            - home
+            - work
+            - fav
+        name:
+          type: string
+        address:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+      required:
+        - id
+        - kind
+        - name
+        - lat
+        - lng
+    SavePlaceDto:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+            - home
+            - work
+            - fav
+        name:
+          type: string
+          example: Work
+        address:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+      required:
+        - kind
+        - name
+        - lat
+        - lng
+    LatLngDto:
+      type: object
+      properties:
+        lat:
+          type: number
+          example: 32.0853
+        lng:
+          type: number
+          example: 34.7818
+      required:
+        - lat
+        - lng
+    RouteRequestDto:
+      type: object
+      properties:
+        origin:
+          $ref: '#/components/schemas/LatLngDto'
+        destination:
+          $ref: '#/components/schemas/LatLngDto'
+        avoid:
+          type: array
+          items:
+            type: string
+            enum:
+              - tolls
+              - highways
+              - ferries
+        language:
+          type: string
+          enum:
+            - he
+            - en
+          default: en
+          description: Language of maneuver instructions
+      required:
+        - origin
+        - destination
+    ManeuverDto:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+            - depart
+            - arrive
+            - continue
+            - slight_right
+            - right
+            - sharp_right
+            - uturn
+            - sharp_left
+            - left
+            - slight_left
+            - ramp
+            - exit
+            - keep_right
+            - keep_left
+            - merge
+            - roundabout
+            - ferry
+        instruction:
+          type: string
+          example: Turn right onto Jabotinsky Street.
+        streetNames:
+          type: array
+          items:
+            type: string
+        distanceM:
+          type: number
+          description: Length of this maneuver segment
+        durationS:
+          type: number
+        beginShapeIndex:
+          type: number
+          description: Index into the decoded polyline where this maneuver starts
+      required:
+        - kind
+        - instruction
+        - streetNames
+        - distanceM
+        - durationS
+        - beginShapeIndex
+    RouteOptionDto:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Pass to POST /trips; valid for 30 minutes
+        polyline6:
+          type: string
+          description: Encoded polyline, precision 6
+        durationS:
+          type: number
+        distanceM:
+          type: number
+        maneuvers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManeuverDto'
+        flags:
+          type: array
+          items:
+            type: string
+            enum:
+              - toll
+              - highway
+              - ferry
+        cells:
+          description: Geohash-6 cells to subscribe to on the realtime gateway
+          type: array
+          items:
+            type: string
+      required:
+        - id
+        - polyline6
+        - durationS
+        - distanceM
+        - maneuvers
+        - flags
+        - cells
+    StartTripDto:
+      type: object
+      properties:
+        routeId:
+          type: string
+          description: Route id from POST /routes
+      required:
+        - routeId
+    TripStartedDto:
+      type: object
+      properties:
+        tripId:
+          type: string
+        probeToken:
+          type: string
+          description: Credential for POST /probes. Not linked to the user in the probe stream.
+        probeTokenExpiresInS:
+          type: number
+        startedAt:
+          type: string
+      required:
+        - tripId
+        - probeToken
+        - probeTokenExpiresInS
+        - startedAt
+    UpdateTripDto:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - finished
+            - cancelled
+        routeId:
+          type: string
+          description: New route id after a reroute
+    TripDto:
+      type: object
+      properties:
+        id:
+          type: string
+        routeId:
+          type: string
+        status:
+          type: string
+          enum:
+            - active
+            - finished
+            - cancelled
+        distanceM:
+          type: number
+        startedAt:
+          type: string
+        endedAt:
+          type: string
+      required:
+        - id
+        - routeId
+        - status
+        - distanceM
+        - startedAt
+    ProbeFixDto:
+      type: object
+      properties:
+        t:
+          type: number
+          description: Unix epoch milliseconds
+        lat:
+          type: number
+        lng:
+          type: number
+        speed:
+          type: number
+          description: m/s
+        heading:
+          type: number
+          description: degrees, 0 = north
+        acc:
+          type: number
+          description: horizontal accuracy, metres
+      required:
+        - t
+        - lat
+        - lng
+    ProbeBatchDto:
+      type: object
+      properties:
+        probeToken:
+          type: string
+        fixes:
+          description: 1–600 fixes (10 min at 1 Hz)
+          type: array
+          items:
+            $ref: '#/components/schemas/ProbeFixDto'
+      required:
+        - probeToken
+        - fixes
+    ProbesAcceptedDto:
+      type: object
+      properties:
+        accepted:
+          type: number
+        dropped:
+          type: number
+          description: Fixes dropped for poor accuracy or bad timestamps
+      required:
+        - accepted
+        - dropped
+    CreateReportDto:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - traffic
+            - police
+            - crash
+            - hazard
+            - closure
+            - camera
+        lat:
+          type: number
+        lng:
+          type: number
+        heading:
+          type: number
+          description: Reporter direction of travel, degrees
+        clientId:
+          type: string
+          description: Client-generated id; retries with the same id are idempotent
+      required:
+        - type
+        - lat
+        - lng
+        - clientId
+    ReportDto:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum:
+            - traffic
+            - police
+            - crash
+            - hazard
+            - closure
+            - camera
+        lat:
+          type: number
+        lng:
+          type: number
+        heading:
+          type: number
+          nullable: true
+        confidence:
+          type: number
+          description: 0–1
+        createdAt:
+          type: string
+        expiresAt:
+          type: string
+      required:
+        - id
+        - type
+        - lat
+        - lng
+        - heading
+        - confidence
+        - createdAt
+        - expiresAt
+    ReportCreatedDto:
+      type: object
+      properties:
+        id:
+          type: string
+        merged:
+          type: boolean
+          description: true when the report was merged into an existing nearby one
+        report:
+          $ref: '#/components/schemas/ReportDto'
+      required:
+        - id
+        - merged
+        - report
+    VoteDto:
+      type: object
+      properties:
+        stillThere:
+          type: boolean
+      required:
+        - stillThere
+    VoteResultDto:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum:
+            - active
+            - expired
+        confidence:
+          type: number
+        expiresAt:
+          type: string
+      required:
+        - id
+        - status
+        - confidence
+        - expiresAt

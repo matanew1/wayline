@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: wayline
+resources:
+  - api.yaml
+images:
+  - name: wayline-api
+    newName: ghcr.io/OWNER/wayline-api
+    newTag: latest

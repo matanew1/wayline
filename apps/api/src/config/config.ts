@@ -1,0 +1,78 @@
+export type StoreDriver = 'memory' | 'infra';
+export type RoutingDriver = 'mock' | 'valhalla';
+export type GeocoderDriver = 'memory' | 'photon' | 'pelias';
+
+export interface AppConfig {
+  env: 'development' | 'test' | 'production';
+  port: number;
+  /** memory = everything in-process (dev/tests); infra = Postgres + Redis + Kafka */
+  storeDriver: StoreDriver;
+  routingDriver: RoutingDriver;
+  geocoderDriver: GeocoderDriver;
+  jwtSecret: string;
+  accessTtlS: number;
+  refreshTtlS: number;
+  /** Secret mixed into phone hashes so a DB dump does not reveal phone numbers. */
+  phonePepper: string;
+  /** Return the OTP in the API response. Never allowed in production. */
+  otpDevEcho: boolean;
+  databaseUrl: string;
+  redisUrl: string;
+  kafkaBrokers: string[];
+  valhallaUrl: string;
+  geocoderUrl: string;
+  corsOrigins: string[] | true;
+}
+
+const DEV_SECRET = 'dev-only-secret-change-me';
+
+function oneOf<T extends string>(name: string, value: string | undefined, allowed: readonly T[], fallback: T): T {
+  const v = (value ?? fallback) as T;
+  if (!allowed.includes(v)) {
+    throw new Error(`${name} must be one of ${allowed.join(', ')} (got "${value}")`);
+  }
+  return v;
+}
+
+function int(name: string, value: string | undefined, fallback: number): number {
+  if (value === undefined || value === '') return fallback;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) throw new Error(`${name} must be a positive integer`);
+  return n;
+}
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  const nodeEnv = oneOf('NODE_ENV', env.NODE_ENV, ['development', 'test', 'production'] as const, 'development');
+  const prod = nodeEnv === 'production';
+
+  const config: AppConfig = {
+    env: nodeEnv,
+    port: int('PORT', env.PORT, 3000),
+    storeDriver: oneOf('STORE_DRIVER', env.STORE_DRIVER, ['memory', 'infra'] as const, prod ? 'infra' : 'memory'),
+    routingDriver: oneOf('ROUTING_DRIVER', env.ROUTING_DRIVER, ['mock', 'valhalla'] as const, prod ? 'valhalla' : 'mock'),
+    geocoderDriver: oneOf('GEOCODER_DRIVER', env.GEOCODER_DRIVER, ['memory', 'photon', 'pelias'] as const, prod ? 'photon' : 'memory'),
+    jwtSecret: env.JWT_SECRET ?? DEV_SECRET,
+    accessTtlS: int('JWT_ACCESS_TTL_S', env.JWT_ACCESS_TTL_S, 15 * 60),
+    refreshTtlS: int('JWT_REFRESH_TTL_S', env.JWT_REFRESH_TTL_S, 30 * 24 * 3600),
+    phonePepper: env.PHONE_PEPPER ?? 'dev-pepper',
+    otpDevEcho: env.OTP_DEV_ECHO ? env.OTP_DEV_ECHO === 'true' : !prod,
+    databaseUrl: env.DATABASE_URL ?? 'postgres://wayline:wayline@localhost:5432/wayline',
+    redisUrl: env.REDIS_URL ?? 'redis://localhost:6379',
+    kafkaBrokers: (env.KAFKA_BROKERS ?? 'localhost:19092').split(',').map((s) => s.trim()).filter(Boolean),
+    valhallaUrl: (env.VALHALLA_URL ?? 'http://localhost:8002').replace(/\/$/, ''),
+    geocoderUrl: (env.GEOCODER_URL ?? 'https://photon.komoot.io').replace(/\/$/, ''),
+    corsOrigins: env.CORS_ORIGINS ? env.CORS_ORIGINS.split(',').map((s) => s.trim()) : true,
+  };
+
+  if (prod) {
+    const problems: string[] = [];
+    if (config.storeDriver !== 'infra') problems.push('STORE_DRIVER must be "infra"');
+    if (config.routingDriver !== 'valhalla') problems.push('ROUTING_DRIVER must be "valhalla"');
+    if (config.geocoderDriver === 'memory') problems.push('GEOCODER_DRIVER must not be "memory"');
+    if (!env.JWT_SECRET || env.JWT_SECRET.length < 32) problems.push('JWT_SECRET must be set (≥ 32 chars)');
+    if (!env.PHONE_PEPPER || env.PHONE_PEPPER.length < 16) problems.push('PHONE_PEPPER must be set (≥ 16 chars)');
+    if (config.otpDevEcho) problems.push('OTP_DEV_ECHO must be false');
+    if (problems.length) throw new Error(`Invalid production config:\n - ${problems.join('\n - ')}`);
+  }
+  return config;
+}

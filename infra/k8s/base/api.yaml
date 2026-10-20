@@ -1,0 +1,120 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wayline-api
+data:
+  NODE_ENV: production
+  PORT: "3000"
+  STORE_DRIVER: infra
+  ROUTING_DRIVER: valhalla
+  GEOCODER_DRIVER: photon
+  GEOCODER_URL: http://photon:2322
+  VALHALLA_URL: http://valhalla:8002
+  KAFKA_BROKERS: redpanda:9092
+  OTP_DEV_ECHO: "false"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: wayline-migrate
+  annotations:
+    # Run with each release (Argo CD / Helm hook equivalents); the migrator holds an advisory lock.
+    argocd.argoproj.io/hook: PreSync
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: wayline-api
+          command: ["node", "dist/scripts/migrate.js"]
+          envFrom:
+            - secretRef: { name: wayline-api }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wayline-api
+  labels: { app: wayline-api }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: wayline-api }
+  strategy:
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  template:
+    metadata:
+      labels: { app: wayline-api }
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: api
+          image: wayline-api
+          ports: [{ name: http, containerPort: 3000 }]
+          envFrom:
+            - configMapRef: { name: wayline-api }
+            - secretRef: { name: wayline-api }   # JWT_SECRET, PHONE_PEPPER, DATABASE_URL, REDIS_URL
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 250m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wayline-api
+spec:
+  selector: { app: wayline-api }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: wayline-api
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: wayline-api }
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 65 } }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: wayline-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app: wayline-api }
+---
+# Clients use the websocket transport only, so no sticky sessions are needed;
+# the Redis adapter fans events out across replicas.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wayline-api
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.wayline.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: wayline-api, port: { name: http } } }

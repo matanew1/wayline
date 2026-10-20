@@ -1,0 +1,93 @@
+# Local stack.
+#   npm run infra:up                         → postgres, redis, redpanda (enough for STORE_DRIVER=infra)
+#   docker compose --profile routing up -d   → + Valhalla (first start builds Israel tiles, ~10–20 min)
+#   docker compose --profile app up -d --build → + the API container itself
+name: wayline
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: wayline
+      POSTGRES_PASSWORD: wayline
+      POSTGRES_DB: wayline
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wayline"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda start
+      - --mode dev-container
+      - --smp 1
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+    ports: ["19092:19092"]
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health", "--exit-when-healthy"]
+      interval: 5s
+      retries: 20
+
+  redpanda-init:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    depends_on: { redpanda: { condition: service_healthy } }
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        rpk -X brokers=redpanda:9092 topic create probes.raw -p 12 -c retention.ms=604800000 || true;
+        rpk -X brokers=redpanda:9092 topic create reports.events -p 6 || true;
+        rpk -X brokers=redpanda:9092 topic create traffic.edges -p 12 -c cleanup.policy=compact || true
+    restart: "no"
+
+  valhalla:
+    profiles: ["routing"]
+    image: ghcr.io/nilsnolde/docker-valhalla/valhalla:latest
+    environment:
+      tile_urls: https://download.geofabrik.de/asia/israel-and-palestine-latest.osm.pbf
+      use_tiles_ignore_pbf: "True"
+      build_elevation: "False"
+      build_admins: "True"
+      build_time_zones: "True"
+      server_threads: "2"
+    ports: ["8002:8002"]
+    volumes: ["./valhalla_data:/custom_files"]
+
+  api:
+    profiles: ["app"]
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      redpanda-init: { condition: service_completed_successfully }
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      STORE_DRIVER: infra
+      ROUTING_DRIVER: valhalla
+      GEOCODER_DRIVER: photon
+      GEOCODER_URL: https://photon.komoot.io
+      DATABASE_URL: postgres://wayline:wayline@postgres:5432/wayline
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: redpanda:9092
+      VALHALLA_URL: http://valhalla:8002
+      JWT_SECRET: local-compose-secret-change-me-0123456789
+      PHONE_PEPPER: local-compose-pepper-0123
+      OTP_DEV_ECHO: "false"
+    command: ["sh", "-c", "node dist/scripts/migrate.js && node dist/main.js"]
+    ports: ["3000:3000"]
+
+volumes:
+  pgdata:

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
+import { clampTrust } from '../reports/report.rules';
 
 export interface User {
   id: string;
@@ -15,6 +16,8 @@ export interface UsersRepository {
   findOrCreateByPhoneHash(phoneHash: string): Promise<User>;
   createGuest(): Promise<User>;
   findById(id: string): Promise<User | null>;
+  /** Adds delta to trust_score, clamped (guests have a lower cap). Returns the new score. */
+  adjustTrust(id: string, delta: number): Promise<number | null>;
 }
 
 export class MemoryUsersRepository implements UsersRepository {
@@ -26,6 +29,12 @@ export class MemoryUsersRepository implements UsersRepository {
   }
   async createGuest() { return this.insert({ phoneHash: null, isGuest: true }); }
   async findById(id: string) { return this.byId.get(id) ?? null; }
+  async adjustTrust(id: string, delta: number) {
+    const u = this.byId.get(id);
+    if (!u) return null;
+    u.trustScore = clampTrust(u.trustScore + delta, u.isGuest);
+    return u.trustScore;
+  }
 
   private insert(p: { phoneHash: string | null; isGuest: boolean }): User {
     const u: User = { id: randomUUID(), displayName: null, trustScore: p.isGuest ? 0.3 : 0.5, createdAt: new Date(), ...p };
@@ -58,5 +67,13 @@ export class PgUsersRepository implements UsersRepository {
   async findById(id: string) {
     const { rows } = await this.pg.query<Row>(`SELECT * FROM users WHERE id = $1`, [id]);
     return rows[0] ? map(rows[0]) : null;
+  }
+  async adjustTrust(id: string, delta: number) {
+    const { rows } = await this.pg.query<{ trust_score: number }>(
+      `UPDATE users SET trust_score = LEAST(CASE WHEN is_guest THEN 0.5 ELSE 1 END, GREATEST(0, trust_score + $2))
+       WHERE id = $1 RETURNING trust_score`,
+      [id, delta],
+    );
+    return rows[0] ? Number(rows[0].trust_score) : null;
   }
 }

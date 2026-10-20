@@ -6,8 +6,11 @@ import type { AuthUser } from '../../common/auth';
 import type { KvStore } from '../../common/kv';
 import { CLOCK, Clock, KV, REPORT_LOG, REPORT_STORE, USERS_REPO } from '../../common/tokens';
 import type { UsersRepository } from '../users/users.repository';
+import { Metrics } from '../../observability/metrics';
 import { ReportEvents } from './report.events';
-import { AlreadyVotedError, applyVote, MERGE_RADIUS_M, newReport, Report, REPORTS_PER_HOUR, shouldMerge } from './report.rules';
+import {
+  AlreadyVotedError, applyVote, MERGE_RADIUS_M, newReport, Report, REPORTS_PER_HOUR, shouldMerge, TRUST_ON_CONFIRM, TRUST_ON_REJECT,
+} from './report.rules';
 import type { ActiveReportStore, ReportLog, VoteRecord } from './report.store';
 import type { CreateReportDto, ReportCreatedDto, ReportDto, VoteResultDto } from './reports.dto';
 
@@ -27,6 +30,7 @@ export class ReportsService implements OnModuleDestroy {
     @Inject(USERS_REPO) private readonly users: UsersRepository,
     @Inject(CLOCK) private readonly clock: Clock,
     private readonly events: ReportEvents,
+    private readonly metrics: Metrics,
   ) {}
 
   private readonly queues = new Map<string, Promise<void>>();
@@ -46,9 +50,20 @@ export class ReportsService implements OnModuleDestroy {
     });
   }
 
+  /** Reporter reputation; off the request path like history writes. */
+  private trust(userId: string, delta: number) {
+    const p = this.users.adjustTrust(userId, delta).then(
+      () => undefined,
+      (e) => this.log.error(`trust update failed for ${userId}: ${(e as Error).message}`),
+    );
+    this.pendingTrust.add(p);
+    void p.finally(() => this.pendingTrust.delete(p));
+  }
+  private readonly pendingTrust = new Set<Promise<void>>();
+
   /** Resolves when all queued history writes are done (used on shutdown and in tests). */
   async flush() {
-    await Promise.all([...this.queues.values()]);
+    await Promise.all([...this.queues.values(), ...this.pendingTrust]);
   }
 
   // Runs before InfraModule closes the pool (onApplicationShutdown).
@@ -82,6 +97,7 @@ export class ReportsService implements OnModuleDestroy {
         report = applyVote(target, user.id, true, now).report;
         await this.store.save(report);
         this.persist(report, 'active', { userId: user.id, stillThere: true });
+        this.trust(target.reporterId, TRUST_ON_CONFIRM);
         this.events.emit({ kind: 'upsert', report: toReportDto(report) });
       }
     } else {
@@ -92,6 +108,7 @@ export class ReportsService implements OnModuleDestroy {
       this.events.emit({ kind: 'upsert', report: toReportDto(report) });
     }
 
+    this.metrics.reportsCreated.inc({ type: dto.type, merged: String(merged) });
     await this.kv.set(idemKey, report.id, 24 * 3600);
     return { id: report.id, merged, report: toReportDto(report) };
   }
@@ -108,6 +125,9 @@ export class ReportsService implements OnModuleDestroy {
     }
     const next = outcome.report;
     const vote = { userId: user.id, stillThere };
+    this.metrics.reportVotes.inc({ still_there: String(stillThere), expired: String(outcome.expired) });
+    if (stillThere) this.trust(r.reporterId, TRUST_ON_CONFIRM);
+    else if (outcome.expired) this.trust(r.reporterId, TRUST_ON_REJECT);
     if (outcome.expired) {
       await this.store.remove(id);
       this.persist(next, 'expired', vote);

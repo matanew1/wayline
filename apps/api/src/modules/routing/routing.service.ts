@@ -5,6 +5,7 @@ import type { KvStore } from '../../common/kv';
 import { KV, ROUTING_ENGINE } from '../../common/tokens';
 import type { RouteOptionDto, RouteRequestDto } from './routing.dto';
 import type { RoutingEngine } from './routing.engine';
+import { Metrics } from '../../observability/metrics';
 
 export const ROUTE_CACHE_TTL_S = 30 * 60;
 
@@ -22,15 +23,23 @@ export class RoutingService {
   constructor(
     @Inject(ROUTING_ENGINE) private readonly engine: RoutingEngine,
     @Inject(KV) private readonly kv: KvStore,
+    private readonly metrics: Metrics,
   ) {}
 
   async plan(req: RouteRequestDto): Promise<RouteOptionDto[]> {
-    const routes = await this.engine.route({
-      origin: req.origin,
-      destination: req.destination,
-      avoid: req.avoid ?? [],
-      language: req.language ?? 'en',
-    });
+    let routes;
+    try {
+      routes = await this.engine.route({
+        origin: req.origin,
+        destination: req.destination,
+        avoid: req.avoid ?? [],
+        language: req.language ?? 'en',
+      });
+    } catch (e) {
+      this.metrics.routesPlanned.inc({ outcome: 'error' });
+      throw e;
+    }
+    this.metrics.routesPlanned.inc({ outcome: routes.length ? 'ok' : 'no_route' });
     if (routes.length === 0) throw new NotFoundException('No route found between these points');
 
     return Promise.all(

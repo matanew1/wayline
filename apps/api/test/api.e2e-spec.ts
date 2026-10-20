@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { decodePolyline } from '../src/common/geo';
-import { auth, createApp, FakeClock, guestToken } from './helpers';
+import { auth, createApp, FakeClock, guestToken, guestTokenViaHttp } from './helpers';
 
 describe('Wayline API (in-memory drivers)', () => {
   let app: INestApplication;
@@ -33,6 +33,11 @@ describe('Wayline API (in-memory drivers)', () => {
       const refreshed = await request(http).post('/v1/auth/refresh').send({ refreshToken: ok.body.refreshToken }).expect(200);
       expect(refreshed.body.userId).toBe(ok.body.userId);
       await request(http).post('/v1/auth/refresh').send({ refreshToken: ok.body.accessToken }).expect(401); // access ≠ refresh
+    });
+
+    it('issues guest sessions over HTTP', async () => {
+      const g = await guestTokenViaHttp(app);
+      await request(http).get('/v1/me/places').set(auth(g.token)).expect(200);
     });
 
     it('rejects bad phone numbers and missing tokens', async () => {
@@ -170,6 +175,42 @@ describe('Wayline API (in-memory drivers)', () => {
       }
       await request(http).post('/v1/reports').set(auth(a.token)).send({ type: 'hazard', lat: 30, lng: 35, clientId: 'rate-over-x' }).expect(429);
     });
+  });
+
+  describe('trust score', () => {
+    it('rises when others confirm a report and falls when it is voted away', async () => {
+      const { USERS_REPO } = await import('../src/common/tokens');
+      const users = app.get(USERS_REPO);
+      const reporter = await guestToken(app);
+      const trustOf = async () => (await users.findById(reporter.userId))!.trustScore;
+      const before = await trustOf();
+
+      const spot = { lat: 31.9, lng: 34.9 };
+      const r1 = await request(http).post('/v1/reports').set(auth(reporter.token)).send({ type: 'hazard', ...spot, clientId: 'trust-a-0001' }).expect(201);
+      const c1 = await guestToken(app);
+      await request(http).post(`/v1/reports/${r1.body.id}/votes`).set(auth(c1.token)).send({ stillThere: true }).expect(200);
+      // a duplicate report by someone else counts as a confirmation too
+      const c2 = await guestToken(app);
+      await request(http).post('/v1/reports').set(auth(c2.token)).send({ type: 'hazard', ...spot, clientId: 'trust-b-0001' }).expect(201);
+      await new Promise((r) => setTimeout(r, 20));
+      const confirmed = await trustOf();
+      expect(confirmed).toBeCloseTo(before + 0.04, 5);
+
+      const r2 = await request(http).post('/v1/reports').set(auth(reporter.token)).send({ type: 'crash', lat: 31.95, lng: 34.95, clientId: 'trust-a-0002' }).expect(201);
+      for (const v of [await guestToken(app), await guestToken(app)]) {
+        await request(http).post(`/v1/reports/${r2.body.id}/votes`).set(auth(v.token)).send({ stillThere: false }).expect(200);
+      }
+      await new Promise((r) => setTimeout(r, 20));
+      expect(await trustOf()).toBeCloseTo(confirmed - 0.05, 5);
+    });
+  });
+
+  it('exposes Prometheus metrics', async () => {
+    const res = await request(http).get('/metrics').expect(200);
+    expect(res.headers['content-type']).toContain('text/plain');
+    expect(res.text).toContain('wayline_reports_created_total{type="police",merged="false"}');
+    expect(res.text).toMatch(/wayline_http_request_duration_seconds_count\{method="POST",route="\/v1\/reports",status="201"\} \d+/);
+    expect(res.text).toContain('wayline_probe_fixes_total{result="dropped"} 1');
   });
 
   it('serves health and OpenAPI docs', async () => {

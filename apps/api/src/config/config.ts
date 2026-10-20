@@ -1,6 +1,7 @@
 export type StoreDriver = 'memory' | 'infra';
 export type RoutingDriver = 'mock' | 'valhalla';
 export type GeocoderDriver = 'memory' | 'photon' | 'pelias';
+export type SmsDriver = 'log' | 'twilio';
 
 export interface AppConfig {
   env: 'development' | 'test' | 'production';
@@ -22,6 +23,12 @@ export interface AppConfig {
   valhallaUrl: string;
   geocoderUrl: string;
   corsOrigins: string[] | true;
+  smsDriver: SmsDriver;
+  twilio: { accountSid: string; authToken: string; from?: string; messagingServiceSid?: string };
+  /** Expose GET /metrics (Prometheus). Protect it at the ingress. */
+  metricsEnabled: boolean;
+  /** JSON log lines (one object per line) — on by default in production. */
+  jsonLogs: boolean;
 }
 
 const DEV_SECRET = 'dev-only-secret-change-me';
@@ -62,7 +69,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     valhallaUrl: (env.VALHALLA_URL ?? 'http://localhost:8002').replace(/\/$/, ''),
     geocoderUrl: (env.GEOCODER_URL ?? 'https://photon.komoot.io').replace(/\/$/, ''),
     corsOrigins: env.CORS_ORIGINS ? env.CORS_ORIGINS.split(',').map((s) => s.trim()) : true,
+    smsDriver: oneOf('SMS_DRIVER', env.SMS_DRIVER, ['log', 'twilio'] as const, prod ? 'twilio' : 'log'),
+    twilio: {
+      accountSid: env.TWILIO_ACCOUNT_SID ?? '',
+      authToken: env.TWILIO_AUTH_TOKEN ?? '',
+      from: env.TWILIO_FROM || undefined,
+      messagingServiceSid: env.TWILIO_MESSAGING_SERVICE_SID || undefined,
+    },
+    metricsEnabled: env.METRICS_ENABLED ? env.METRICS_ENABLED === 'true' : true,
+    jsonLogs: env.LOG_FORMAT ? env.LOG_FORMAT === 'json' : prod,
   };
+  const t = config.twilio;
+  const twilioMissing = config.smsDriver === 'twilio' && (!t.accountSid || !t.authToken || (!t.from && !t.messagingServiceSid));
+  const twilioMsg = 'SMS_DRIVER=twilio needs TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM or TWILIO_MESSAGING_SERVICE_SID';
+  if (twilioMissing && !prod) throw new Error(twilioMsg);
 
   if (prod) {
     const problems: string[] = [];
@@ -72,6 +92,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     if (!env.JWT_SECRET || env.JWT_SECRET.length < 32) problems.push('JWT_SECRET must be set (≥ 32 chars)');
     if (!env.PHONE_PEPPER || env.PHONE_PEPPER.length < 16) problems.push('PHONE_PEPPER must be set (≥ 16 chars)');
     if (config.otpDevEcho) problems.push('OTP_DEV_ECHO must be false');
+    if (twilioMissing) problems.push(twilioMsg);
+    if (config.smsDriver === 'log') problems.push('SMS_DRIVER must not be "log" (codes would only be logged)');
     if (problems.length) throw new Error(`Invalid production config:\n - ${problems.join('\n - ')}`);
   }
   return config;

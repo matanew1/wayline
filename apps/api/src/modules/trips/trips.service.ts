@@ -4,6 +4,7 @@ import {
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { KvStore } from '../../common/kv';
 import { CLOCK, Clock, KV, PROBE_SINK, TRIPS_REPO } from '../../common/tokens';
+import { Metrics } from '../../observability/metrics';
 import { RoutingService } from '../routing/routing.service';
 import type { ProbeSink } from './probe-sink';
 import type { ProbeBatchDto, ProbesAcceptedDto, TripDto, TripStartedDto, UpdateTripDto } from './trips.dto';
@@ -30,6 +31,7 @@ export class TripsService {
     @Inject(PROBE_SINK) private readonly sink: ProbeSink,
     @Inject(CLOCK) private readonly clock: Clock,
     private readonly routing: RoutingService,
+    private readonly metrics: Metrics,
   ) {}
 
   private async routeOr404(routeId: string) {
@@ -87,6 +89,8 @@ export class TripsService {
         throw new ServiceUnavailableException('Probe ingestion temporarily unavailable');
       }
     }
+    this.metrics.probeFixes.inc({ result: 'accepted' }, good.length);
+    this.metrics.probeFixes.inc({ result: 'dropped' }, batch.fixes.length - good.length);
     return { accepted: good.length, dropped: batch.fixes.length - good.length };
   }
 }

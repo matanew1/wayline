@@ -4,19 +4,23 @@ Community-powered navigation: routes with live ETAs, turn-by-turn guidance and c
 (police, crashes, hazards, closures). The product scope, screens and architecture decisions are on
 the design canvas ("Engineering handoff" artboard).
 
-- **Phase 0 — backend:** API, realtime gateway, infra (below)
+- **Phase 0 — backend:** API, realtime gateway, infra
 - **Phase 1 — Drive A→B:** the mobile app + platform-free navigation engine ([Mobile app](#mobile-app))
+- **Phase 2 — community:** reports, votes, realtime fan-out, trust scores, shared rate limits
+- **Phase 3 — live traffic:** probe pipeline, live-traffic routing, speed limits, faster-route offers ([Live traffic](#live-traffic))
 
 ```
 apps/api                  NestJS 11 API (REST + Socket.IO), TypeScript
-apps/mobile               Expo SDK 58 / React Native 0.88 driver app (MapLibre, background GPS, voice)
+apps/traffic-worker       Python 3.13 service: GPS probes → map matching → live per-edge speeds
+apps/mobile               Expo SDK 58 / React Native 0.88 driver app (MapLibre, background GPS, voice, Hebrew/RTL)
 packages/navigation-core  Guidance engine: route tracking, voice timing, rerouting, report alerts, probe upload, simulator
 packages/contracts        Types + typed fetch client generated from openapi.yaml
 scripts/sim-drive.ts      Headless end-to-end drive against a running API
-infra/sql             Forward-only SQL migrations (PostGIS)
-infra/k8s             Kustomize base + Minikube overlay
-openapi.yaml          Generated API contract — CI fails if it drifts from the code
-docker-compose.yml    Postgres/PostGIS, Redis, Redpanda (Kafka), Valhalla, the API
+scripts/valhalla-test.sh  Real Valhalla on a synthetic street grid (tests / offline dev)
+infra/sql                 Forward-only SQL migrations (PostGIS)
+infra/k8s                 Kustomize base (API, worker, Valhalla, Photon) + Minikube overlay
+openapi.yaml              Generated API contract — CI fails if it drifts from the code
+docker-compose.yml        Postgres/PostGIS, Redis, Redpanda, Valhalla, Photon, Jaeger, Prometheus, API, worker
 ```
 
 ## Run it
@@ -46,15 +50,28 @@ Every external dependency is behind a port with an in-memory adapter, picked by 
 | `STORE_DRIVER` | `memory` \| `infra` | users, places, trips → Postgres · OTP, rate limits, route cache, active reports → Redis · probes → Kafka |
 | `ROUTING_DRIVER` | `mock` \| `valhalla` | `MockRoutingEngine` (two L-shaped routes) / `ValhallaEngine` |
 | `GEOCODER_DRIVER` | `memory` \| `photon` \| `pelias` | 5 sample places / Photon / Pelias |
+| `SMS_DRIVER` | `log` \| `twilio` | codes in the log / Twilio (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID` or `TWILIO_FROM`) |
 
-Production (`NODE_ENV=production`) refuses to boot with memory drivers, default secrets or OTP echo on.
+Production (`NODE_ENV=production`) refuses to boot with memory drivers, the log SMS sender, default
+secrets or OTP echo on.
+
+**Observability:** `GET /metrics` (Prometheus: HTTP latency per route template, routes planned,
+reports, votes, probe fixes, realtime connections, live-vs-default edge pricing) · OpenTelemetry
+traces when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (http, express, pg, ioredis, kafkajs auto-instrumented)
+· JSON logs in production. `docker compose --profile observability up -d` runs Jaeger (:16686) and Prometheus (:9090).
 
 ## Test
 
 ```bash
-npm test                     # unit + e2e on in-memory drivers (28 tests, ~6 s)
-npm run test:integration     # real Postgres+PostGIS and Redis, incl. two API replicas over the Redis adapter
-                             # needs DATABASE_URL (a throwaway DB — it is wiped) and REDIS_URL (db 15 is flushed)
+npm test                        # API unit + e2e, navigation-core, mobile pure logic (in-memory, ~15 s)
+
+scripts/valhalla-test.sh --daemon   # real Valhalla from a synthetic grid (pyvalhalla; no OSM download)
+VALHALLA_URL=http://127.0.0.1:8002 npm run test:integration
+                                # real Postgres+PostGIS, Redis and Valhalla: two API replicas over the Redis adapter,
+                                # shared rate limits, Valhalla routes/instructions/toll avoidance/edges
+                                # needs DATABASE_URL (a throwaway DB — it is wiped) and REDIS_URL (db 15 is flushed)
+
+cd apps/traffic-worker && pip install -e '.[dev]' && pytest   # worker; integration needs VALHALLA_URL + REDIS_URL
 ```
 
 ## API (v1)
@@ -66,8 +83,9 @@ Full contract: `/docs` (Swagger UI) or `openapi.yaml`.
 | `POST /v1/auth/otp` · `/verify` · `/guest` · `/refresh` | Phone OTP sign-in (6 digits, 5 min, 5 attempts, 30 s resend cooldown), guest mode, JWT access (15 min) + refresh (30 d) |
 | `GET /v1/places/search` | Autocomplete, biased to a point |
 | `GET/PUT /v1/me/places`, `DELETE /v1/me/places/:id` | Home, Work (one each) and up to 50 favourites |
-| `POST /v1/routes` | Up to 3 alternatives: polyline6, maneuvers, flags, and the geohash cells to subscribe to |
+| `POST /v1/routes` | Up to 3 alternatives ranked by live-traffic ETA: polyline6, maneuvers, flags, speed limits, congestion, realtime cells; honours `avoid` tolls/highways/ferries |
 | `POST /v1/trips`, `PATCH /v1/trips/:id` | Start (returns a probe token), reroute, finish/cancel (revokes the token) |
+| `POST /v1/trips/:id/eta` | Live remaining time + a faster route when it saves ≥ 3 min (position used once, not stored) |
 | `POST /v1/probes` | Batched GPS fixes → Kafka `probes.raw`. Auth is the probe token only; the message carries a random session id, never the user |
 | `POST /v1/reports`, `POST /v1/reports/:id/votes`, `GET /v1/reports/nearby` | Create (idempotent on `clientId`, 10/hour/user, merges duplicates within 150 m and 45° heading), vote, initial load |
 
@@ -81,7 +99,9 @@ s.on('report.upsert', (r) => …);  s.on('report.remove', ({ id }) => …);
 
 **Report rules** (`apps/api/src/modules/reports/report.rules.ts`): TTL by type (traffic 30 min, police 45,
 crash 60, hazard 90, closure 24 h, camera 30 d); "still there" adds +½ TTL (capped at 3× TTL) and
-+0.1 confidence; two consecutive "not there" expire it; one vote per user. Active reports live in
++0.1 confidence; two consecutive "not there" expire it; one vote per user. The reporter's trust
+(which seeds the confidence of their future reports) gains 0.02 per confirmation and loses 0.05 when
+a report is voted away; guests are capped at 0.5. Active reports live in
 Redis (GEO index + per-report key that expires itself); every change is also written to Postgres
 in one transaction, in order per report, off the request path.
 
@@ -92,6 +112,26 @@ import { createWaylineClient } from '@wayline/contracts';
 const api = createWaylineClient(API, () => tokens.access);
 const { data: routes } = await api.POST('/v1/routes', { body: { origin, destination } });
 ```
+
+## Live traffic
+
+```
+app ──probes (10 s batches, trimmed 300 m at both ends)──▶ API ──▶ Kafka probes.raw
+                                                                       │
+                     apps/traffic-worker ◀─────────────────────────────┘
+                     stitch batches per trip → Valhalla trace_attributes (map_snap)
+                     → speed per directed edge → 5-min window, published only after ≥ 2 trips
+                     → Redis traffic:live · Kafka traffic.edges · Postgres edge_speeds_hourly
+                                                                       │
+API POST /routes ──Valhalla route──▶ edges via trace_attributes (edge_walk) ◀── HMGET traffic:live
+     → ETA = router estimate × live/free-flow time over the same edges → re-rank, speed limits, congestion
+App every 60 s ──POST /trips/:id/eta──▶ corrected ETA + "Faster route found" offer
+```
+
+Live data is keyed by Valhalla's directional edge id, which both sides get from the same tiles
+(the worker integration test asserts the ids match). Speeds older than 15 min are ignored.
+Upgrade path when needed: write speeds into Valhalla's `traffic.tar` so the router itself costs
+edges with live speeds, instead of re-ranking its alternatives.
 
 ## Mobile app
 
@@ -121,7 +161,13 @@ flow headless (auth → search → route → trip → guidance → police alert 
    and batches probes (first/last 300 m trimmed on the device, backoff on 503, stop on 401)
 4. Off-route for 3 consecutive fixes → reroute (≥ 10 s apart) → `PATCH /trips/:id` with the new route,
    realtime subscription moves to the new route's cells
-5. Arrival → `PATCH /trips/:id {status: finished}`
+5. Every 60 s `POST /trips/:id/eta`: the server's live-traffic remaining time corrects the local ETA;
+   a faster route shows as a card (and is spoken) — taking it is a normal reroute
+6. Arrival → `PATCH /trips/:id {status: finished}`
+
+**Settings** (persisted): language (phone / Hebrew / English — Hebrew flips the layout to RTL with a
+one-time reload, and routes, voice and search results switch too), voice, avoid tolls / highways,
+which report types are spoken. **Account:** phone sign-in with SMS code; guests can use everything.
 
 | Builds (`eas.json`) | `APP_VARIANT` | Notes |
 |---|---|---|
@@ -137,26 +183,20 @@ PMTiles style for production.
 - Image: `docker build -f apps/api/Dockerfile .` (non-root, healthcheck, migrations baked in at `/app/sql`)
 - Kubernetes: `infra/k8s/base` (Deployment ×2, HPA 2–20, PDB, Ingress with long websocket timeouts,
   migration Job). `infra/k8s/minikube` adds single-instance Postgres/Redis/Redpanda for local clusters.
-- CI (`.github/workflows/ci.yml`): typecheck → unit/e2e → integration on PostGIS + Redis service
-  containers → build → OpenAPI drift check → image build (pushed to GHCR on `main`).
+- Worker image: `docker build apps/traffic-worker` (non-root, `/health`, `/metrics` on :9464)
+- CI (`.github/workflows/ci.yml`): typecheck → unit/e2e → real Valhalla from the synthetic grid →
+  integration on PostGIS + Redis + Valhalla → worker tests → build → OpenAPI drift check → mobile
+  (core tests, typecheck, lint, both bundles) → API and worker images (pushed to GHCR on `main`).
 
-## Not built yet (next phases)
+## Before launch (needs accounts, devices or data — not code)
 
-Mobile:
-- **Not yet run on a device** — verified by typecheck, lint, Metro bundles for both platforms, native
-  config generation, core tests and the headless drive. First real-device pass: map rendering,
-  background guidance with the screen off, audio ducking, Android 14 foreground-service behaviour.
-- **Phone sign-in screen** — `requestOtp` / `verifyOtp` exist in `src/api/auth.ts`; the app runs as a guest.
-- **Speed limits** — the speed bubble shows current speed only (needs a speed-limit source, e.g. Valhalla `trace_attributes`).
-- **Hebrew UI / RTL** — the guidance engine speaks Hebrew (`language: 'he'`); UI strings aren't localised yet.
-- **Recents persistence**, settings screen, CarPlay / Android Auto (v1.1).
-
-Backend:
-
-- **SMS provider** — `LogSmsSender` only logs the code. Implement `SmsSender` for Twilio/Vonage/SNS.
-- **Traffic pipeline (Phase 3)** — consumer of `probes.raw` → Valhalla Meili map-matching → edge
-  speeds → `traffic.edges` → Valhalla live traffic; then the `traffic.delta` realtime event.
-- **Trust score updates** — the column exists and seeds report confidence; nothing raises/lowers it yet.
-- **Shared rate limiting** — Throttler is per replica; add a Redis store or limit at the ingress.
-- **Observability** — OpenTelemetry tracing + metrics exporters.
-- Self-hosted Photon/Pelias (the public Photon instance is for development only).
+- **Run on real phones.** Everything is verified by tests, typecheck, lint, Metro bundles and native
+  config generation, but not on a device yet: map rendering, guidance with the screen off, audio
+  ducking, Android 14 foreground-service behaviour, RTL layout in Hebrew.
+- **Twilio:** account, a Messaging Service, and an alphanumeric sender ID registered for Israel.
+- **Map data:** build Valhalla tiles and a PMTiles basemap from the Israel OSM extract (the compose
+  Valhalla does this on first start), and point `EXPO_PUBLIC_MAP_STYLE_URL` at your own style.
+- **Photon index:** the compose / k8s Photon downloads the Israel index on first start.
+- **CarPlay / Android Auto:** needs Apple's CarPlay navigation entitlement and Google's car-app review;
+  the guidance engine is platform-free, so these are new UI shells over the same `NavigationSession`.
+- **Store listings, privacy policy** (background location justification for both stores).

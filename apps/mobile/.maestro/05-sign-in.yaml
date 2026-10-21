@@ -23,13 +23,22 @@ env:
     timeout: 15000
 - tapOn:
     id: code-input
+# dev API builds echo the code into the field; type it explicitly either way
+- eraseText: 10
 - inputText: ${CODE}
 - hideKeyboard
 - tapOn:
     id: verify-code
+# signing in closes the account screen and returns to Settings
+- extendedWaitUntil:
+    visible:
+      id: open-account
+    timeout: 15000
+- tapOn:
+    id: open-account
 - extendedWaitUntil:
     visible:
       id: sign-out
-    timeout: 15000
+    timeout: 10000
 - assertVisible:
     id: delete-account

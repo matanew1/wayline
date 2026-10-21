@@ -23,8 +23,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.Observer
-import com.facebook.react.ReactApplication
-import com.facebook.react.ReactInstanceManager
+import com.facebook.react.ReactHost
 import com.facebook.react.bridge.LifecycleEventListener
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,7 +34,7 @@ import org.birkir.carplay.utils.EventEmitter
 import org.birkir.carplay.utils.ReactContextResolver
 
 class CarPlayService : CarAppService(), LifecycleEventListener {
-  private lateinit var reactInstanceManager: ReactInstanceManager
+  private lateinit var reactHost: ReactHost
   private lateinit var emitter: EventEmitter
   private lateinit var notificationManager: NotificationManager
   private var mServiceBound = false
@@ -98,7 +97,7 @@ class CarPlayService : CarAppService(), LifecycleEventListener {
   override fun onCreate() {
     Log.d(TAG, "CarPlayService onCreate")
     super.onCreate()
-    reactInstanceManager = (application as ReactApplication).reactNativeHost.reactInstanceManager
+    reactHost = ReactContextResolver.reactHost(application)
 
     notificationManager = this.getSystemService(NotificationManager::class.java)
 
@@ -113,7 +112,7 @@ class CarPlayService : CarAppService(), LifecycleEventListener {
     CarPlayModule.notifier.observeForever(notificationObserver)
 
     CoroutineScope(Dispatchers.Main).launch {
-      val reactContext = ReactContextResolver.getReactContext(reactInstanceManager)
+      val reactContext = ReactContextResolver.getReactContext(reactHost)
       emitter = EventEmitter(reactContext)
       reactContext.addLifecycleEventListener(this@CarPlayService)
     }
@@ -135,7 +134,7 @@ class CarPlayService : CarAppService(), LifecycleEventListener {
       "onCreateSession: sessionId = ${sessionInfo.sessionId}, display = ${sessionInfo.displayType}"
     )
 
-    val session = CarPlaySession(reactInstanceManager, sessionInfo)
+    val session = CarPlaySession(reactHost, sessionInfo)
 
     if (sessionInfo.displayType == SessionInfo.DISPLAY_TYPE_CLUSTER) {
       return session

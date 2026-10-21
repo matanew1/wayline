@@ -13,5 +13,11 @@
   },
   "scripts": {
     "build:types": "tsc -p tsconfig.json"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/g4rb4g3/react-native-carplay"
+  },
+  "author": "Birkir Gudjonsson <birkir.gudjonsson@gmail.com>",
+  "homepage": "https://github.com/g4rb4g3/react-native-carplay"
 }

@@ -10,10 +10,12 @@ import React
 
 @objc(RNCarPlayViewController)
 public class RNCarPlayViewController: UIViewController {
-    let rootView: RCTRootView
-    
-    @objc public init(rootView: RCTRootView) {
+    let rootView: UIView
+    let moduleName: String
+
+    @objc public init(rootView: UIView, moduleName: String) {
         self.rootView = rootView
+        self.moduleName = moduleName
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -44,7 +46,7 @@ public class RNCarPlayViewController: UIViewController {
                 "left": self.view.safeAreaInsets.left,
                 "right": self.view.safeAreaInsets.right,
                 "top": self.view.safeAreaInsets.top,
-                "id": self.rootView.moduleName,
+                "id": self.moduleName,
             ])
     }
 
@@ -60,7 +62,7 @@ public class RNCarPlayViewController: UIViewController {
                 body: [
                     "colorScheme": traitCollection.userInterfaceStyle == .dark
                         ? "dark" : "light",
-                    "id": self.rootView.moduleName,
+                    "id": self.moduleName,
                 ])
         }
     }

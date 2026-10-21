@@ -18,7 +18,7 @@ public class RNCarPlayCluster: NSObject, CPInstrumentClusterControllerDelegate {
     var bridge: RCTBridge?
     var id: String?
 
-    var rootView: RCTRootView?
+    var rootView: UIView?
 
     @objc public var isConnected = false
 
@@ -88,8 +88,8 @@ public class RNCarPlayCluster: NSObject, CPInstrumentClusterControllerDelegate {
             return
         }
 
-        let rootView = RCTRootView(
-            bridge: bridge, moduleName: id,
+        guard let rootView = RNCarPlayRootView.make(
+            moduleName: id,
             initialProperties: [
                 "id": self.id ?? "",
                 "colorScheme": window.screen.traitCollection
@@ -99,12 +99,14 @@ public class RNCarPlayCluster: NSObject, CPInstrumentClusterControllerDelegate {
                     "width": window.screen.bounds.size.width,
                     "scale": window.screen.scale,
                 ],
-            ])
+            ]) else {
+            return
+        }
 
         self.rootView = rootView
 
         window.rootViewController = RNCarPlayViewController(
-            rootView: rootView)
+            rootView: rootView, moduleName: id)
 
         RNCarPlayUtils.sendRNCarPlayEvent(
             name: "clusterWindowDidConnect",
@@ -118,9 +120,6 @@ public class RNCarPlayCluster: NSObject, CPInstrumentClusterControllerDelegate {
     }
 
     @objc public func disconnect() {
-        if let contentView = self.rootView?.contentView as? RCTRootContentView {
-            contentView.invalidate()
-        }
         self.rootView?.removeFromSuperview()
 
         self.rootView = nil

@@ -1,0 +1,120 @@
+name: native-builds
+
+# Compiles the native apps, which nothing else in CI does for iOS or for the CarPlay / Android Auto
+# build: iOS simulator (normal + WAYLINE_CAR=1) on macOS, and Android with WAYLINE_CAR=1
+# (the normal Android build is covered by e2e-android). Debug builds — this checks that the native
+# code compiles and links, not the JS bundle.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "apps/mobile/app.config.ts"
+      - "apps/mobile/package.json"
+      - "apps/mobile/plugins/**"
+      - "apps/mobile/react-native.config.js"
+      - "packages/react-native-carplay/**"
+      - "package-lock.json"
+      - ".github/workflows/native-builds.yml"
+  schedule:
+    - cron: "41 3 * * 0" # weekly
+
+concurrency:
+  group: native-builds-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EXPO_NO_TELEMETRY: "1"
+  APP_VARIANT: development
+
+jobs:
+  android-car:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env: { WAYLINE_CAR: "1" }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: "17" }
+      - run: npm ci
+      - name: Prebuild (car plugin applied)
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform android --no-install
+      - name: Build
+        working-directory: apps/mobile/android
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --no-daemon -PreactNativeArchitectures=x86_64 > gradle.log 2>&1 && exit 0
+          set +e
+          enc() { head -c 60000 | awk 'BEGIN{ORS="%0A"}{gsub(/%/,"%25");gsub(/\r/,"");print}'; }
+          errs=$(grep -E "^e: |error:|Unresolved reference|ERROR:" gradle.log | sed 's|file:///home/runner/work/wayline/wayline/||' | sort -u)
+          [ -n "$errs" ] && echo "::error title=gradle errors::$(printf '%s' "$errs" | enc)"
+          echo "::error title=gradle: what went wrong::$(grep -A12 "What went wrong" gradle.log | head -30 | enc)"
+          echo "::error title=gradle: log tail::$(tail -40 gradle.log | enc)"
+          exit 1
+
+      - name: Car service and metadata are in the merged manifest
+        working-directory: apps/mobile/android/app/build
+        run: |
+          m=$(find intermediates -path '*merged_manifest*' -name AndroidManifest.xml | grep -i debug | head -1)
+          echo "manifest: $m"
+          grep -q 'org.birkir.carplay.CarPlayService' "$m" || { echo "::error::CarAppService missing from $m"; exit 1; }
+          grep -q 'com.google.android.gms.car.application' "$m" || { echo "::error::Android Auto meta-data missing from $m"; exit 1; }
+          grep -q 'androidx.car.app.category.NAVIGATION' "$m" || { echo "::error::navigation category missing from $m"; exit 1; }
+          echo "::notice title=Android Auto::car service, navigation category and meta-data present"
+
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        car: ["0", "1"]
+    name: ios (car=${{ matrix.car }})
+    env: { WAYLINE_CAR: "${{ matrix.car }}" }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: maxim-lobanov/setup-xcode@v1
+        with: { xcode-version: latest-stable }
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Prebuild + pods
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform ios
+      - name: CarPlay wiring
+        if: matrix.car == '1'
+        working-directory: apps/mobile/ios
+        run: |
+          fail=0
+          check() { if eval "$2"; then echo "::notice title=CarPlay::$1"; else echo "::error title=CarPlay::$1 — missing"; fail=1; fi; }
+          check "CarSceneDelegate.swift" 'test -f WaylineDev/CarSceneDelegate.swift'
+          check "carplay-maps entitlement" 'grep -q carplay-maps WaylineDev/*.entitlements'
+          check "CarPlay scene in Info.plist" '/usr/libexec/PlistBuddy -c "Print :UIApplicationSceneManifest:UISceneConfigurations:CPTemplateApplicationSceneSessionRoleApplication" WaylineDev/Info.plist'
+          check "car pod installed" 'grep -qi "carplay" Podfile.lock'
+          check "Swift file in Xcode project" 'grep -q CarSceneDelegate.swift WaylineDev.xcodeproj/project.pbxproj'
+          if [ $fail = 1 ]; then
+            echo "::error title=CarPlay::pods: $(grep -o '^  - [A-Za-z-]*' Podfile.lock | tr -d ' -' | tr '\n' ' ' | cut -c1-800)"
+            ls WaylineDev | tr '\n' ' ' | sed 's/^/::error title=files::/'; echo
+            exit 1
+          fi
+      - name: Library not linked without the flag
+        if: matrix.car == '0'
+        working-directory: apps/mobile/ios
+        run: |
+          if grep -q "react-native-carplay" Podfile.lock; then echo "::error::car library linked in a normal build"; exit 1; fi
+      - name: Build for simulator
+        working-directory: apps/mobile/ios
+        run: |
+          set -o pipefail
+          xcodebuild -workspace WaylineDev.xcworkspace -scheme WaylineDev -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO build \
+            | tee xcodebuild.log | grep -E "error:|warning: .*CarSceneDelegate|\*\* BUILD" || true
+          grep -q "\*\* BUILD SUCCEEDED \*\*" xcodebuild.log || {
+            errs=$(grep "error:" xcodebuild.log | sed 's|/Users/runner/work/wayline/wayline/||' | sort -u)
+            echo "::error title=xcodebuild ($(printf '%s\n' "$errs" | grep -c .) errors)::$(printf '%s' "$errs" | head -c 60000 | awk 'BEGIN{ORS="%0A"}{gsub(/%/,"%25");print}')"
+            exit 1
+          }
+          echo "::notice title=iOS car=${WAYLINE_CAR}::simulator build succeeded"

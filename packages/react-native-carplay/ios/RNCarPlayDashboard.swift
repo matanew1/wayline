@@ -18,7 +18,7 @@ public class RNCarPlayDashboard: NSObject {
     var moduleName: String = "carplay-dashboard"
     var buttonConfig: [AnyHashable: Any] = [:]
 
-    var rootView: RCTRootView?
+    var rootView: UIView?
 
     @objc public var isConnected = false
 
@@ -56,13 +56,13 @@ public class RNCarPlayDashboard: NSObject {
             return
         }
 
-        guard let bridge = self.bridge else {
+        guard self.bridge != nil else {
             // connectModule was not called yet
             return
         }
 
-        let rootView = RCTRootView(
-            bridge: bridge, moduleName: self.moduleName,
+        guard let rootView = RNCarPlayRootView.make(
+            moduleName: self.moduleName,
             initialProperties: [
                 "id": self.moduleName,
                 "colorScheme": window.screen.traitCollection
@@ -72,12 +72,14 @@ public class RNCarPlayDashboard: NSObject {
                     "width": window.screen.bounds.size.width,
                     "scale": window.screen.scale,
                 ],
-            ])
+            ]) else {
+            return
+        }
 
         self.rootView = rootView
 
         window.rootViewController = RNCarPlayViewController(
-            rootView: rootView)
+            rootView: rootView, moduleName: self.moduleName)
 
         let isVisible = RNCPStore.sharedManager().getVisibility(
             RNCarPlayConstants.SceneIdCarPlayDashbaord)
@@ -88,9 +90,6 @@ public class RNCarPlayDashboard: NSObject {
     }
 
     @objc func disconnect() {
-        if let contentView = self.rootView?.contentView as? RCTRootContentView {
-            contentView.invalidate()
-        }
 
         self.rootView?.removeFromSuperview()
         self.rootView = nil

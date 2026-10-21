@@ -20,6 +20,9 @@ typedef void(^SelectedResultBlock)(void);
 @property (nonatomic, copy) SelectedResultBlock _Nullable selectedResultBlock;
 @property (nonatomic) BOOL isNowPlayingActive;
 
+/// Bridgeless React Native: creates the React root view for a CarPlay scene (window, dashboard, cluster).
+/// Call before connecting, typically with the app's RCTReactNativeFactory.rootViewFactory.
++ (void) setRootViewFactory:(UIView *_Nonnull (^_Nullable)(NSString *_Nonnull moduleName, NSDictionary *_Nonnull initialProperties))factory;
 + (void) connectWithInterfaceController:(CPInterfaceController*_Nullable)interfaceController window:(CPWindow*_Nonnull)window;
 + (void) disconnect;
 + (void) stateChanged:(BOOL)isVisible;

@@ -1,7 +1,12 @@
 #import "RNCarPlay.h"
 #import <React/RCTConvert.h>
 #import <React/RCTRootView.h>
+// Generated Swift interface: framework-style path when the pod defines a module, flat otherwise.
+#if __has_include("react_native_carplay/react_native_carplay-Swift.h")
 #import "react_native_carplay/react_native_carplay-Swift.h"
+#else
+#import "react_native_carplay-Swift.h"
+#endif
 
 static NSMutableDictionary<NSNumber *, CPNavigationAlert *> *navigationAlertWrappers;
 
@@ -52,6 +57,10 @@ static NSMutableDictionary<NSNumber *, CPNavigationAlert *> *navigationAlertWrap
         @"height": @(window.bounds.size.height),
         @"scale": @(window.screen.scale)
     };
+}
+
++ (void) setRootViewFactory:(UIView * (^)(NSString *moduleName, NSDictionary *initialProperties))factory {
+    RNCarPlayRootView.factory = factory;
 }
 
 + (void) connectWithInterfaceController:(CPInterfaceController*)interfaceController window:(CPWindow*)window {

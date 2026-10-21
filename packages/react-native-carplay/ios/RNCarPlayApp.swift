@@ -9,7 +9,7 @@ public class RNCarPlayApp: NSObject, CPInterfaceControllerDelegate {
     var bridge: RCTBridge?
     var moduleName: String = "carplay-app"
 
-    var rootView: RCTRootView?
+    var rootView: UIView?
 
     @objc public var isConnected = false
 
@@ -59,13 +59,13 @@ public class RNCarPlayApp: NSObject, CPInterfaceControllerDelegate {
             return
         }
 
-        guard let bridge = self.bridge else {
+        guard self.bridge != nil else {
             // connectModule was not called yet
             return
         }
 
-        let rootView = RCTRootView(
-            bridge: bridge, moduleName: self.moduleName,
+        guard let rootView = RNCarPlayRootView.make(
+            moduleName: self.moduleName,
             initialProperties: [
                 "id": self.moduleName,
                 "colorScheme": window.screen.traitCollection
@@ -75,12 +75,14 @@ public class RNCarPlayApp: NSObject, CPInterfaceControllerDelegate {
                     "width": window.bounds.size.width,
                     "scale": window.screen.scale,
                 ],
-            ])
+            ]) else {
+            return
+        }
 
         self.rootView = rootView
 
         window.rootViewController = RNCarPlayViewController(
-            rootView: rootView)
+            rootView: rootView, moduleName: self.moduleName)
 
         let isVisible = RNCPStore.sharedManager().getVisibility(
             RNCarPlayConstants.SceneIdCarPlayApp)
@@ -91,10 +93,6 @@ public class RNCarPlayApp: NSObject, CPInterfaceControllerDelegate {
     }
 
     @objc public func disconnect() {
-        if let contentView = self.rootView?.contentView as? RCTRootContentView {
-            contentView.invalidate()
-        }
-
         self.rootView?.removeFromSuperview()
 
         self.rootView = nil

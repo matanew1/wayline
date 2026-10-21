@@ -12,7 +12,7 @@ import {
   AlertTemplate, AndroidAutoManeuverType, CarPlay, ManeuverType, MapTemplate, NavigationTemplate, PauseReason, Trip,
   type AndroidAction, type AndroidTravelEstimates, type Maneuver, type NavigationInfo,
 } from '@g4rb4g3/react-native-carplay';
-import { Platform, type ImageSourcePropType } from 'react-native';
+import { AppRegistry, Platform, type ImageSourcePropType } from 'react-native';
 import {
   androidAutoManeuverType, carGuidance, carPlayManeuverType, type CarGuidance, type CarIcon, type CarManeuver,
 } from '@wayline/navigation-core';
@@ -254,6 +254,12 @@ function onDisconnect() {
 }
 
 export function startCarSession() {
+  if (Platform.OS === 'android') {
+    // The Android Auto service starts these JS apps on its own (headless) surfaces; the UI itself
+    // comes from the templates set in onConnect, so they render nothing.
+    AppRegistry.registerComponent('AndroidAuto', () => () => null);
+    AppRegistry.registerComponent('AndroidAutoCluster', () => () => null);
+  }
   CarPlay.registerOnConnect(onConnect);
   CarPlay.registerOnDisconnect(onDisconnect);
   if (CarPlay.connected) onConnect();

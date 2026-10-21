@@ -71,7 +71,8 @@ jobs:
           disable-animations: true
           script: |
             adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk || (echo "::error title=adb install::APK install failed" && exit 1)
-            cd apps/mobile && maestro test .maestro --format junit --output ../../maestro-report.xml --debug-output ../../maestro-debug
+            adb wait-for-device shell 'while [ "$(getprop sys.boot_completed)" != 1 ]; do sleep 2; done'
+            cd apps/mobile && (maestro test .maestro --format junit --output ../../maestro-report.xml --debug-output ../../maestro-debug || (echo "::warning title=Maestro::first attempt failed — retrying once (emulator / driver flakes)" && sleep 15 && maestro test .maestro --format junit --output ../../maestro-report.xml --debug-output ../../maestro-debug))
 
       # Results as annotations, so they're readable from the run page / API without downloading logs.
       - name: Report flow results

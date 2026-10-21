@@ -28,7 +28,8 @@ function boundsOf(points: LatLng[]): LngLatBounds {
  *  nav     — follow the snapped position, heading-up, tilted
  */
 export const WaylineMap = forwardRef<WaylineMapHandle>(function WaylineMap(_, ref) {
-  const { t } = useT();
+  const { t, lang } = useT();
+  const styleUrl = config.mapStyleUrl ?? `${config.apiUrl}/map/style.json?lang=${lang}`;
   const camera = useRef<CameraRef>(null);
   const screen = useApp((s) => s.screen);
   const position = useApp((s) => s.position);
@@ -116,7 +117,7 @@ export const WaylineMap = forwardRef<WaylineMapHandle>(function WaylineMap(_, re
         : {};
 
   return (
-    <Map style={StyleSheet.absoluteFill} mapStyle={config.mapStyleUrl} compass={false} logo attribution touchPitch={false}>
+    <Map style={StyleSheet.absoluteFill} mapStyle={styleUrl} compass={false} logo attribution touchPitch={false}>
       <Camera ref={camera} initialViewState={{ center: ll(config.fallbackCenter), zoom: 13 }} {...cameraStop} />
 
       <GeoJSONSource id="routes" data={lines} lineMetrics>

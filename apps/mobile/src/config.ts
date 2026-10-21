@@ -9,7 +9,8 @@ const localApi = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://lo
 
 export const config = {
   apiUrl: (extra.apiUrl || localApi).replace(/\/$/, ''),
-  mapStyleUrl: extra.mapStyleUrl || 'https://tiles.openfreemap.org/styles/liberty',
+  /** Explicit override; otherwise the API serves the style (our tiles, or a redirect to OpenFreeMap). */
+  mapStyleUrl: extra.mapStyleUrl || null,
   variant: extra.variant ?? 'development',
   /** Used before the first GPS fix, and as the origin for simulated drives without GPS (dev only). */
   fallbackCenter: { lat: 32.0853, lng: 34.7818 } as LatLng,

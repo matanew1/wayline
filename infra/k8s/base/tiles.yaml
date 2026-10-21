@@ -1,0 +1,62 @@
+# Basemap: a Job builds israel.pmtiles with Planetiler into a volume; Martin serves it.
+# Re-run the Job (kubectl create job --from=cronjob/basemap-build …) to refresh, or let the CronJob do it monthly.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: basemap }
+spec:
+  accessModes: [ReadWriteMany]
+  resources: { requests: { storage: 10Gi } }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: { name: basemap-build }
+spec:
+  schedule: "0 3 1 * *"   # monthly
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: planetiler
+              image: ghcr.io/onthegomap/planetiler:0.10.2
+              args: ["--download", "--area=israel-and-palestine", "--languages=he,en,ar", "--maxzoom=14",
+                     "--output=/data/israel.pmtiles.new", "--force"]
+              env: [{ name: JAVA_TOOL_OPTIONS, value: "-Xmx3g" }]
+              resources: { requests: { cpu: "2", memory: 4Gi }, limits: { memory: 5Gi } }
+              volumeMounts: [{ name: data, mountPath: /data }]
+            # swap in atomically once the build succeeded (Martin re-reads on restart)
+          volumes: [{ name: data, persistentVolumeClaim: { claimName: basemap } }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: tiles, labels: { app: tiles } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: tiles } }
+  template:
+    metadata: { labels: { app: tiles } }
+    spec:
+      initContainers:
+        - name: promote
+          image: busybox:1.36
+          command: ["sh", "-c", "[ -f /data/israel.pmtiles.new ] && mv /data/israel.pmtiles.new /data/israel.pmtiles; ls -la /data"]
+          volumeMounts: [{ name: data, mountPath: /data }]
+      containers:
+        - name: martin
+          image: ghcr.io/maplibre/martin:1.16.1
+          args: ["/data/israel.pmtiles"]
+          ports: [{ name: http, containerPort: 3000 }]
+          readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { memory: 512Mi } }
+          volumeMounts: [{ name: data, mountPath: /data, readOnly: true }]
+      volumes: [{ name: data, persistentVolumeClaim: { claimName: basemap } }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: tiles }
+spec:
+  selector: { app: tiles }
+  ports: [{ name: http, port: 80, targetPort: http }]

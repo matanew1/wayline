@@ -309,6 +309,22 @@ describe('Wayline API (in-memory drivers)', () => {
     expect(en.text).toContain('class="warn"');
   });
 
+  it('serves the map style: fallback redirect, or our tiles with localised labels', async () => {
+    await request(http).get('/map/style.json').expect(302).expect('location', 'https://tiles.openfreemap.org/styles/liberty');
+    const { CONFIG } = await import('../src/common/tokens');
+    const cfg = app.get(CONFIG);
+    cfg.map = { ...cfg.map, tilesUrl: 'https://tiles.example.com/israel' };
+    try {
+      const he = await request(http).get('/map/style.json?lang=he').expect(200);
+      expect(he.body.sources.openmaptiles.url).toBe('https://tiles.example.com/israel');
+      const label = he.body.layers.find((l: any) => l.id === 'road-label');
+      expect(label.layout['text-field']).toEqual(['coalesce', ['get', 'name:he'], ['get', 'name']]);
+      expect(JSON.stringify(he.body)).not.toContain('__');
+    } finally {
+      cfg.map = { ...cfg.map, tilesUrl: null };
+    }
+  });
+
   it('exposes Prometheus metrics', async () => {
     const res = await request(http).get('/metrics').expect(200);
     expect(res.headers['content-type']).toContain('text/plain');

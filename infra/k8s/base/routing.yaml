@@ -13,7 +13,12 @@ spec:
         - name: valhalla
           image: ghcr.io/nilsnolde/docker-valhalla/valhalla:latest
           env:
+            # first start downloads the extract and builds tiles into the volume (or pre-load
+            # valhalla_tiles.tar built by infra/map-data/build.sh / the map-data workflow)
+            - { name: tile_urls, value: "https://download.geofabrik.de/asia/israel-and-palestine-latest.osm.pbf" }
             - { name: use_tiles_ignore_pbf, value: "True" }
+            - { name: build_admins, value: "True" }
+            - { name: build_time_zones, value: "True" }
             - { name: server_threads, value: "4" }
           ports: [{ name: http, containerPort: 8002 }]
           volumeMounts: [{ name: tiles, mountPath: /custom_files }]
@@ -23,13 +28,13 @@ spec:
             limits: { memory: 3Gi }
       volumes:
         - name: tiles
-          persistentVolumeClaim: { claimName: valhalla-tiles, readOnly: true }
+          persistentVolumeClaim: { claimName: valhalla-tiles }
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata: { name: valhalla-tiles }
 spec:
-  accessModes: [ReadOnlyMany]
+  accessModes: [ReadWriteMany]
   resources: { requests: { storage: 10Gi } }
 ---
 apiVersion: v1

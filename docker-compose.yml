@@ -4,6 +4,8 @@
 #   docker compose --profile app up -d --build → + the API and traffic worker containers
 #   docker compose --profile geocoder up -d      → + self-hosted Photon (Israel extract; first start downloads data)
 #   docker compose --profile observability up -d → + Jaeger (traces, :16686) and Prometheus (:9090)
+#   docker compose --profile tiles up -d         → + Martin serving our basemap (build it first:
+#                                                    infra/map-data/build.sh --out map-data-out)
 name: wayline
 
 services:
@@ -78,6 +80,14 @@ services:
     ports: ["2322:2322"]
     volumes: ["photon_data:/photon/data"]
 
+  tiles:
+    profiles: ["tiles"]
+    image: ghcr.io/maplibre/martin:1.16.1
+    # serves map-data-out/israel.pmtiles as /israel (TileJSON) and /israel/{z}/{x}/{y}
+    command: ["/data/israel.pmtiles"]
+    volumes: ["./map-data-out:/data:ro"]
+    ports: ["3100:3000"]
+
   jaeger:
     profiles: ["observability"]
     image: jaegertracing/all-in-one:1.62.0
@@ -123,6 +133,8 @@ services:
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
       TWILIO_MESSAGING_SERVICE_SID: ${TWILIO_MESSAGING_SERVICE_SID:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      # with --profile tiles: the app's map style points at our own basemap
+      MAP_TILES_URL: ${MAP_TILES_URL:-}
       DATABASE_URL: postgres://wayline:wayline@postgres:5432/wayline
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: redpanda:9092

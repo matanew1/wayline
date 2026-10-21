@@ -31,6 +31,14 @@ export interface AppConfig {
   jsonLogs: boolean;
   /** Optional fixed sign-in for App Store / Play review: this number accepts this code, no SMS sent. */
   review: { phone: string; code: string } | null;
+  map: {
+    /** TileJSON URL of our vector tiles (Martin), e.g. https://tiles.example.com/israel. Unset → fallback style. */
+    tilesUrl: string | null;
+    glyphsUrl: string;
+    fallbackStyleUrl: string;
+    /** Where style.template.json lives. */
+    styleDir: string;
+  };
 }
 
 const DEV_SECRET = 'dev-only-secret-change-me';
@@ -81,6 +89,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     metricsEnabled: env.METRICS_ENABLED ? env.METRICS_ENABLED === 'true' : true,
     jsonLogs: env.LOG_FORMAT ? env.LOG_FORMAT === 'json' : prod,
     review: env.REVIEW_PHONE && env.REVIEW_CODE ? { phone: env.REVIEW_PHONE, code: env.REVIEW_CODE } : null,
+    map: {
+      tilesUrl: env.MAP_TILES_URL || null,
+      glyphsUrl: env.MAP_GLYPHS_URL ?? 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+      fallbackStyleUrl: env.MAP_FALLBACK_STYLE_URL ?? 'https://tiles.openfreemap.org/styles/liberty',
+      styleDir: env.MAP_STYLE_DIR ?? require('node:path').resolve(__dirname, '../../../../infra/map-data'),
+    },
   };
   if (config.review && !/^\d{6}$/.test(config.review.code)) throw new Error('REVIEW_CODE must be 6 digits');
   const t = config.twilio;

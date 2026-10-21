@@ -5,6 +5,7 @@ resources:
   - api.yaml
   - routing.yaml
   - traffic-worker.yaml
+  - tiles.yaml
 images:
   - name: wayline-api
     newName: ghcr.io/OWNER/wayline-api

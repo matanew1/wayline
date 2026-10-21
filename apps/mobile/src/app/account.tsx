@@ -105,7 +105,7 @@ export default function AccountScreen() {
           <View style={{ gap: 16 }}>
             <Text style={styles.body}>{t('signedInAs', { phone: savedPhone ?? '' })}</Text>
             <PrimaryButton title={t('signOut')} tone="secondary" onPress={() => void logout()} testID="sign-out" />
-            {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+            {error ? <Text style={styles.error} accessibilityLiveRegion="polite" testID="account-error">{error}</Text> : null}
             {busy ? <ActivityIndicator color={colors.primary} /> : (
               <Pressable accessibilityRole="button" onPress={confirmDelete} style={styles.danger} testID="delete-account">
                 <Text style={styles.dangerText}>{t('deleteAccount')}</Text>
@@ -128,7 +128,7 @@ export default function AccountScreen() {
               style={[styles.input, { textAlign: I18nManager.isRTL ? 'right' : 'left' }]}
             />
             <Text style={styles.hint}>{t('phoneHint')}</Text>
-            {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+            {error ? <Text style={styles.error} accessibilityLiveRegion="polite" testID="account-error">{error}</Text> : null}
             {busy ? <ActivityIndicator color={colors.primary} /> : <PrimaryButton title={t('sendCode')} disabled={!phone.trim()} onPress={() => void send()} testID="send-code" />}
           </View>
         ) : (
@@ -148,7 +148,7 @@ export default function AccountScreen() {
               testID="code-input"
               style={[styles.input, styles.code]}
             />
-            {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+            {error ? <Text style={styles.error} accessibilityLiveRegion="polite" testID="account-error">{error}</Text> : null}
             {busy ? <ActivityIndicator color={colors.primary} /> : <PrimaryButton title={t('verify')} disabled={code.length !== 6} onPress={() => void verify()} testID="verify-code" />}
             <Pressable accessibilityRole="button" onPress={() => { setSentTo(null); setCode(''); }} style={{ padding: 12 }}>
               <Text style={styles.link}>{t('resend')}</Text>

@@ -1,0 +1,8 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "Wayline",
+    "NSLocationWhenInUseUsageDescription": "Wayline משתמשת במיקום שלך כדי להציג היכן את/ה נמצא/ת ולנווט פנייה אחר פנייה.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "אפשרו מיקום בזמן נסיעה כדי שההנחיות ימשיכו לפעול גם כשהמסך כבוי או כשעוברים לאפליקציה אחרת."
+  },
+  "android": { "app_name": "Wayline" }
+}

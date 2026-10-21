@@ -3,6 +3,8 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
 /** APP_VARIANT=development | preview | production (set per EAS build profile). */
 const variant = process.env.APP_VARIANT ?? 'development';
 const isDev = variant === 'development';
+/** CarPlay / Android Auto (opt-in: needs Apple's CarPlay navigation entitlement + Google car-app review). */
+const car = process.env.WAYLINE_CAR === '1';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -36,6 +38,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     'expo-router',
     'expo-secure-store',
+    // Hebrew UI: allow right-to-left layout (switched at runtime by the language setting)
+    ['expo-localization', { supportsRTL: true }],
     '@maplibre/maplibre-react-native',
     [
       'expo-location',
@@ -50,11 +54,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ],
     // Dev builds talk to a local API over plain HTTP.
     ['expo-build-properties', { android: { usesCleartextTraffic: isDev } }],
+    ...(car ? ['./plugins/withCar'] : []),
   ],
+  // Localised system strings (permission prompts, app name)
+  locales: { en: './locales/en.json', he: './locales/he.json' },
   experiments: { typedRoutes: true },
   extra: {
     apiUrl: process.env.EXPO_PUBLIC_API_URL,
     mapStyleUrl: process.env.EXPO_PUBLIC_MAP_STYLE_URL,
     variant,
+    car,
   },
 });

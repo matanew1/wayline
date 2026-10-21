@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: traffic-worker, labels: { app: traffic-worker } }
+spec:
+  # one consumer per probes.raw partition at most (12 partitions); scale with partitions
+  replicas: 2
+  selector: { matchLabels: { app: traffic-worker } }
+  template:
+    metadata:
+      labels: { app: traffic-worker }
+      annotations: { prometheus.io/scrape: "true", prometheus.io/port: "9464" }
+    spec:
+      containers:
+        - name: worker
+          image: wayline-traffic-worker
+          env:
+            - { name: KAFKA_BROKERS, value: redpanda:9092 }
+            - { name: VALHALLA_URL, value: http://valhalla:8002 }
+            - { name: MIN_SESSIONS, value: "2" }
+          envFrom:
+            - secretRef: { name: wayline-api }   # REDIS_URL, DATABASE_URL
+          ports: [{ name: metrics, containerPort: 9464 }]
+          livenessProbe: { httpGet: { path: /health, port: metrics }, periodSeconds: 15 }
+          resources:
+            requests: { cpu: 200m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          securityContext: { runAsNonRoot: true, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true }

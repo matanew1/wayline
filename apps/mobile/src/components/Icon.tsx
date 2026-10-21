@@ -1,3 +1,4 @@
+import { I18nManager } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 /** Stroke icons from the design (24×24 grid). */
@@ -26,13 +27,21 @@ const ICONS = {
   hazard: <><Path d="M12 3l10 18H2z" /><Path d="M12 10v5" /><Path d="M12 18h.01" /></>,
   closure: <><Circle cx="12" cy="12" r="9" /><Path d="M5.6 5.6l12.8 12.8" /></>,
   camera: <><Path d="M3 8h4l2-3h6l2 3h4v11H3z" /><Circle cx="12" cy="13" r="3.5" /></>,
+  settings: <><Circle cx="12" cy="12" r="3" /><Path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></>,
+  user: <><Circle cx="12" cy="8" r="4" /><Path d="M4 21a8 8 0 0 1 16 0" /></>,
+  chevron: <Path d="M9 6l6 6-6 6" />,
+  fast: <><Path d="M13 2L4 14h7l-1 8 9-12h-7z" /></>,
 } as const;
 
 export type IconName = keyof typeof ICONS;
 
+/** Icons that point "forward/back" mirror in right-to-left layouts; turn arrows never do. */
+const DIRECTIONAL = new Set<IconName>(['back', 'chevron']);
+
 export function Icon({ name, size = 22, color = '#0F172A', strokeWidth = 2 }: { name: IconName; size?: number; color?: string; strokeWidth?: number }) {
+  const flip = DIRECTIONAL.has(name) && I18nManager.isRTL;
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={flip ? { transform: [{ scaleX: -1 }] } : undefined}>
       {ICONS[name]}
     </Svg>
   );

@@ -21,6 +21,8 @@ export interface TripsRepository {
   create(t: NewTrip): Promise<Trip>;
   findForUser(userId: string, id: string): Promise<Trip | null>;
   update(id: string, patch: Partial<Pick<Trip, 'routeId' | 'status' | 'endedAt' | 'distanceM'>>): Promise<Trip>;
+  /** Trips hold origins and destinations — personal data, deleted with the account. */
+  removeAll(userId: string): Promise<number>;
 }
 
 export class MemoryTripsRepository implements TripsRepository {
@@ -33,6 +35,11 @@ export class MemoryTripsRepository implements TripsRepository {
   async findForUser(userId: string, id: string) {
     const t = this.trips.get(id);
     return t && t.userId === userId ? t : null;
+  }
+  async removeAll(userId: string) {
+    let n = 0;
+    for (const [id, t] of this.trips) if (t.userId === userId) { this.trips.delete(id); n++; }
+    return n;
   }
   async update(id: string, patch: Partial<Trip>) {
     const t = { ...this.trips.get(id)!, ...patch };
@@ -61,6 +68,10 @@ export class PgTripsRepository implements TripsRepository {
       [t.userId, t.routeId, t.distanceM, t.origin.lng, t.origin.lat, t.destination.lng, t.destination.lat],
     );
     return mapRow(rows[0]);
+  }
+  async removeAll(userId: string) {
+    const res = await this.pg.query(`DELETE FROM trips WHERE user_id = $1`, [userId]);
+    return res.rowCount ?? 0;
   }
   async findForUser(userId: string, id: string) {
     const { rows } = await this.pg.query(`SELECT ${COLS} FROM trips WHERE id = $1 AND user_id = $2`, [id, userId]);

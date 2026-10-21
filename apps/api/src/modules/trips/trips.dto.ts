@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { RouteOptionDto } from '../routing/routing.dto';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, Length, Max, Min, ValidateNested,
@@ -83,4 +84,21 @@ export class ProbeBatchDto {
 export class ProbesAcceptedDto {
   @ApiProperty() accepted: number;
   @ApiProperty({ description: 'Fixes dropped for poor accuracy or bad timestamps' }) dropped: number;
+}
+
+export class EtaRequestDto {
+  @ApiProperty({ description: 'Current position. Used for this calculation only — not stored.' })
+  @IsLatitude()
+  lat: number;
+
+  @ApiProperty() @IsLongitude() lng: number;
+}
+
+export class EtaDto {
+  @ApiProperty({ description: 'Traffic-adjusted time left on the current route' }) remainingS: number;
+  @ApiProperty({ description: 'Distance from the route; large values mean the driver is off route' }) offRouteM: number;
+  @ApiProperty() liveEdges: number;
+  @ApiPropertyOptional({ type: RouteOptionDto, description: 'Present when a route at least FASTER_ROUTE_MIN_SAVING_S faster exists' })
+  fasterRoute?: RouteOptionDto;
+  @ApiPropertyOptional() savingS?: number;
 }

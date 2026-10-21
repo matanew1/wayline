@@ -1,0 +1,8 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "Wayline",
+    "NSLocationWhenInUseUsageDescription": "Wayline uses your location to show where you are and guide you turn by turn.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow location while driving so guidance keeps working when your screen is off or you switch apps."
+  },
+  "android": { "app_name": "Wayline" }
+}

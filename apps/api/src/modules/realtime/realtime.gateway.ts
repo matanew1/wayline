@@ -1,12 +1,13 @@
 import { Logger, OnModuleDestroy } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
-  ConnectedSocket, MessageBody, OnGatewayConnection, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer,
+  ConnectedSocket, MessageBody, OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer,
 } from '@nestjs/websockets';
 import type { Subscription } from 'rxjs';
 import type { Namespace, Socket } from 'socket.io';
 import { verifyAccessToken } from '../../common/auth';
 import { geohashEncode, GEOHASH_RE } from '../../common/geo';
+import { Metrics } from '../../observability/metrics';
 import { ReportEvents } from '../reports/report.events';
 
 export const CELL_PRECISION = 6;
@@ -20,13 +21,13 @@ const room = (cell: string) => `cell:${cell}`;
  *   server →   'report.upsert' ReportDto  |  'report.remove' { id }
  */
 @WebSocketGateway({ namespace: '/rt', cors: { origin: true } })
-export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnModuleDestroy {
+export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
   private readonly log = new Logger('Realtime');
   private sub?: Subscription;
 
   @WebSocketServer() server: Namespace;
 
-  constructor(private readonly jwt: JwtService, private readonly events: ReportEvents) {}
+  constructor(private readonly jwt: JwtService, private readonly events: ReportEvents, private readonly metrics: Metrics) {}
 
   afterInit() {
     this.sub = this.events.stream.subscribe((e) => {
@@ -43,10 +44,16 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnMo
   async handleConnection(client: Socket) {
     try {
       client.data.user = await verifyAccessToken(this.jwt, client.handshake.auth?.token);
+      client.data.counted = true;
+      this.metrics.wsConnections.inc();
     } catch {
       client.emit('error', { message: 'unauthorized' });
       client.disconnect(true);
     }
+  }
+
+  handleDisconnect(client: Socket) {
+    if (client.data.counted) this.metrics.wsConnections.dec();
   }
 
   @SubscribeMessage('subscribe')

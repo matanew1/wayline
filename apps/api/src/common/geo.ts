@@ -120,3 +120,19 @@ export function encodePolyline(points: LatLng[], precision = 6): string {
   }
   return out;
 }
+
+/** Index of the polyline segment nearest to p (segment i = points[i]→points[i+1]) and the distance to it. */
+export function nearestSegment(points: LatLng[], p: LatLng): { index: number; offsetM: number } {
+  let best = { index: 0, offsetM: Infinity };
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i], b = points[i + 1];
+    const k = Math.cos((a.lat * Math.PI) / 180);
+    const bx = (b.lng - a.lng) * k, by = b.lat - a.lat;
+    const px = (p.lng - a.lng) * k, py = p.lat - a.lat;
+    const len2 = bx * bx + by * by;
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, (px * bx + py * by) / len2));
+    const d = haversineM(p, { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t });
+    if (d < best.offsetM) best = { index: i, offsetM: d };
+  }
+  return best;
+}

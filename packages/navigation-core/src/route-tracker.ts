@@ -36,6 +36,8 @@ export interface Progress {
   distanceToManeuverM: number;
   currentStreet: string | null;
   routeBearing: number;
+  /** Posted limit here, when known. */
+  speedLimitKmh: number | null;
   arrived: boolean;
 }
 
@@ -57,6 +59,14 @@ export class RouteTracker {
   /** Distance along the route at which maneuver i happens. */
   maneuverDistance(i: number) {
     return this.maneuverAlong[i];
+  }
+
+  /** Posted speed limit at a distance along the route (spans are in route.distanceM scale). */
+  speedLimitAt(alongM: number): number | null {
+    const spans = this.route.speedLimits;
+    if (!spans?.length) return null;
+    const d = this.route.distanceM > 0 ? (alongM * this.route.distanceM) / this.geometry.lengthM : alongM;
+    return spans.find((s) => d >= s.fromM && d < s.toM)?.kmh ?? null;
   }
 
   update(fix: Fix): Progress {
@@ -105,6 +115,7 @@ export class RouteTracker {
       distanceToManeuverM: Math.max(0, this.maneuverAlong[next] - along),
       currentStreet: this.route.maneuvers[next - 1]?.streetNames[0] ?? null,
       routeBearing: pr.bearing,
+      speedLimitKmh: this.speedLimitAt(along),
       arrived,
     };
   }

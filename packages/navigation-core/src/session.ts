@@ -17,11 +17,30 @@ export interface SessionDeps<R extends ReportLike = ReportLike> {
   onRouteChanged?: (route: NavRoute) => void;
   /** Which report types should produce a spoken alert. */
   alertText?: (r: R) => string | null;
+  /** Server-side live ETA for the remaining route, plus a faster route if one exists. */
+  checkEta?: (position: LatLng) => Promise<EtaCheck | null>;
+  /** Spoken when a faster route is offered (e.g. "Faster route found, saves 4 minutes"). */
+  offerText?: (savingS: number) => string | null;
   language?: Language;
+}
+
+export interface EtaCheck {
+  remainingS: number;
+  fasterRoute?: NavRoute;
+  savingS?: number;
+}
+
+export interface RouteOffer {
+  route: NavRoute;
+  savingS: number;
 }
 
 export interface SessionOptions {
   minRerouteIntervalMs: number;
+  /** How often to ask the server for a live ETA / faster route. */
+  etaCheckEveryMs: number;
+  /** A declined route isn't offered again for this long. */
+  declineCooldownMs: number;
   tracker: Partial<TrackerOptions>;
 }
 
@@ -32,7 +51,11 @@ export interface SessionSnapshot<R extends ReportLike = ReportLike> {
   /** m/s, from GPS or derived from consecutive fixes */
   speedMs: number;
   etaEpochMs: number | null;
+  /** Remaining time including live traffic (local estimate × server correction). */
+  remainingS: number | null;
   alert: ReportAhead<R> | null;
+  /** A faster route the driver can accept or decline. */
+  offer: RouteOffer | null;
   reroutes: number;
 }
 
@@ -57,9 +80,14 @@ export class NavigationSession<R extends ReportLike = ReportLike> {
   private alertedId: string | null = null;
   private snap: SessionSnapshot<R>;
   private ended = false;
+  private lastEtaCheck = -Infinity;
+  private etaInFlight = false;
+  /** server remaining / local remaining, applied to the local estimate between checks */
+  private trafficFactor = 1;
+  private declinedAt = -Infinity;
 
   constructor(route: NavRoute, private readonly destination: LatLng, private readonly deps: SessionDeps<R>, opts: Partial<SessionOptions> = {}) {
-    this.o = { minRerouteIntervalMs: 10_000, tracker: {}, ...opts };
+    this.o = { minRerouteIntervalMs: 10_000, etaCheckEveryMs: 60_000, declineCooldownMs: 5 * 60_000, tracker: {}, ...opts };
     this.lang = deps.language ?? 'en';
     this.tracker = new RouteTracker(route, this.o.tracker);
     this.voice = new VoicePlanner(route.maneuvers, this.lang);
@@ -69,7 +97,7 @@ export class NavigationSession<R extends ReportLike = ReportLike> {
         origin: this.tracker.geometry.points[0], destination, send: deps.sendProbes, now: deps.now,
       });
     }
-    this.snap = { phase: 'navigating', route, progress: null, speedMs: 0, etaEpochMs: null, alert: null, reroutes: 0 };
+    this.snap = { phase: 'navigating', route, progress: null, speedMs: 0, etaEpochMs: null, remainingS: null, alert: null, offer: null, reroutes: 0 };
   }
 
   get snapshot() {
@@ -144,8 +172,59 @@ export class NavigationSession<R extends ReportLike = ReportLike> {
       if (text) this.deps.speak(text, 'alert');
     }
 
-    this.emit({ progress, speedMs, etaEpochMs: now + progress.durationRemainingS * 1000, alert });
+    if (progress.onRoute) this.maybeCheckEta(fix, progress, now);
+    const remainingS = Math.round(progress.durationRemainingS * this.trafficFactor);
+    this.emit({ progress, speedMs, remainingS, etaEpochMs: now + remainingS * 1000, alert });
     return this.snap;
+  }
+
+  private maybeCheckEta(fix: Fix, progress: Progress, now: number) {
+    if (!this.deps.checkEta || this.etaInFlight || now - this.lastEtaCheck < this.o.etaCheckEveryMs) return;
+    this.lastEtaCheck = now;
+    this.etaInFlight = true;
+    const routeId = this.snap.route.id;
+    const localRemaining = progress.durationRemainingS;
+    void this.deps
+      .checkEta({ lat: fix.lat, lng: fix.lng })
+      .then((res) => {
+        if (!res || this.ended || this.snap.route.id !== routeId) return;
+        if (localRemaining > 0) this.trafficFactor = Math.min(4, Math.max(0.5, res.remainingS / localRemaining));
+        const declinedRecently = this.deps.now() - this.declinedAt < this.o.declineCooldownMs;
+        if (res.fasterRoute && res.savingS && !declinedRecently && !this.snap.offer) {
+          const text = this.deps.offerText?.(res.savingS);
+          if (text) this.deps.speak(text, 'status');
+          this.emit({ offer: { route: res.fasterRoute, savingS: res.savingS } });
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => { this.etaInFlight = false; });
+  }
+
+  /** Switch to the offered faster route. */
+  acceptOffer() {
+    const offer = this.snap.offer;
+    if (!offer) return;
+    this.switchTo(offer.route, this.lastFix);
+  }
+
+  declineOffer() {
+    this.declinedAt = this.deps.now();
+    this.emit({ offer: null });
+  }
+
+  private switchTo(route: NavRoute, fix: Fix | null) {
+    this.tracker = new RouteTracker(route, this.o.tracker);
+    this.voice = new VoicePlanner(route.maneuvers, this.lang);
+    this.alerts = new ReportAlertPlanner<R>(this.tracker.geometry);
+    this.alertedId = null;
+    this.trafficFactor = 1; // the new route was priced with live traffic already
+    this.deps.onRouteChanged?.(route);
+    const p = fix ? this.tracker.update(fix) : null;
+    const remainingS = p ? p.durationRemainingS : route.durationS;
+    this.emit({
+      phase: 'navigating', route, progress: p, offer: null, reroutes: this.snap.reroutes + 1,
+      remainingS, etaEpochMs: this.deps.now() + remainingS * 1000,
+    });
   }
 
   private async reroute(fix: Fix, speedMs: number, progress: Progress) {
@@ -164,13 +243,7 @@ export class NavigationSession<R extends ReportLike = ReportLike> {
       this.emit({ phase: 'navigating' });
       return;
     }
-    this.tracker = new RouteTracker(route, this.o.tracker);
-    this.voice = new VoicePlanner(route.maneuvers, this.lang);
-    this.alerts = new ReportAlertPlanner<R>(this.tracker.geometry);
-    this.alertedId = null;
-    this.deps.onRouteChanged?.(route);
-    const p = this.tracker.update(fix);
-    this.emit({ phase: 'navigating', route, progress: p, reroutes: this.snap.reroutes + 1, etaEpochMs: this.deps.now() + p.durationRemainingS * 1000 });
+    this.switchTo(route, fix);
   }
 
   /** Ends the session and uploads any buffered probes. */

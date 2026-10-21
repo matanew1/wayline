@@ -13,3 +13,8 @@ apps/mobile/expo-env.d.ts
 packages/*/dist/
 
 package-lock.json
+.valhalla-test/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+map-data-out/

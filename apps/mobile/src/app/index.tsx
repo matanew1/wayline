@@ -4,12 +4,13 @@ import { getAccessToken } from '@/api/auth';
 import { savedPlaces } from '@/api/wayline';
 import { HomePanel } from '@/components/HomePanel';
 import { NavPanel } from '@/components/NavPanel';
-import { ArrivedPanel, ReportSheet, Toast } from '@/components/Overlays';
+import { ArrivedPanel, LocationDisclosure, ReportSheet, Toast } from '@/components/Overlays';
 import { PreviewPanel } from '@/components/PreviewPanel';
 import { SearchPanel } from '@/components/SearchPanel';
 import { WaylineMap, type WaylineMapHandle } from '@/components/WaylineMap';
 import { ensureForegroundPermission, watchIdle } from '@/location/location';
 import { cancelPreview, connectRealtime, refreshNearby } from '@/nav/drive';
+import { t } from '@/i18n';
 import { get, pruneReports, set, toast, useApp } from '@/state/store';
 
 /** Bootstraps session, location and the live report feed; screens are overlays on one map. */
@@ -24,7 +25,7 @@ function useBootstrap() {
         connectRealtime();
         savedPlaces().then((saved) => set({ saved })).catch(() => undefined);
       } catch {
-        toast('Can’t reach Wayline — check your connection');
+        toast(t('cantReach'));
       }
       const ok = await ensureForegroundPermission().catch(() => false);
       set({ locationDenied: !ok });
@@ -75,6 +76,7 @@ export default function MapScreen() {
       {screen === 'arrived' ? <ArrivedPanel /> : null}
       {screen === 'search' ? <SearchPanel /> : null}
       <ReportSheet />
+      <LocationDisclosure />
       <Toast />
     </View>
   );

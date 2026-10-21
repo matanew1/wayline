@@ -23,5 +23,6 @@ import { MemorySavedPlacesRepository, PgSavedPlacesRepository } from './saved-pl
       useFactory: (pg: Pool | null) => (pg ? new PgSavedPlacesRepository(pg) : new MemorySavedPlacesRepository()),
     },
   ],
+  exports: [SAVED_PLACES_REPO],
 })
 export class PlacesModule {}

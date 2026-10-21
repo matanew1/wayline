@@ -2,10 +2,16 @@ import {
   CanActivate,
   createParamDecorator,
   ExecutionContext,
+  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import type { KvStore } from './kv';
+import { KV } from './tokens';
+
+/** Marker set on account deletion; outlives any access token issued before it. */
+export const deletedUserKey = (id: string) => `user:deleted:${id}`;
 
 export interface AuthUser {
   id: string;
@@ -31,13 +37,15 @@ export async function verifyAccessToken(jwt: JwtService, token: string | undefin
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private readonly jwt: JwtService) {}
+  constructor(private readonly jwt: JwtService, @Inject(KV) private readonly kv: KvStore) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const req = ctx.switchToHttp().getRequest();
     const header: string | undefined = req.headers?.authorization;
     const token = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
-    req.user = await verifyAccessToken(this.jwt, token);
+    const user = await verifyAccessToken(this.jwt, token);
+    if (await this.kv.get(deletedUserKey(user.id))) throw new UnauthorizedException('Account deleted');
+    req.user = user;
     return true;
   }
 }

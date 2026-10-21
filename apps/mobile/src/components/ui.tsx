@@ -16,12 +16,13 @@ export function Sheet({ children, style }: { children: ReactNode; style?: StyleP
 }
 
 export function RoundButton({
-  icon, label, onPress, size = 48, bg = colors.surface, fg = colors.ink, style, raised = true,
-}: { icon: IconName; label: string; onPress: () => void; size?: number; bg?: string; fg?: string; style?: StyleProp<ViewStyle>; raised?: boolean }) {
+  icon, label, onPress, size = 48, bg = colors.surface, fg = colors.ink, style, raised = true, testID,
+}: { icon: IconName; label: string; onPress: () => void; size?: number; bg?: string; fg?: string; style?: StyleProp<ViewStyle>; raised?: boolean; testID?: string }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      testID={testID}
       hitSlop={6}
       onPress={onPress}
       style={({ pressed }) => [
@@ -54,11 +55,11 @@ export function PrimaryButton({ title, onPress, disabled, tone = 'primary', ...r
   );
 }
 
-export function ListRow({ icon, iconBg = colors.surfaceAlt, iconFg = colors.sub, title, subtitle, right, onPress }: {
-  icon: IconName; iconBg?: string; iconFg?: string; title: string; subtitle?: string; right?: string; onPress: () => void;
+export function ListRow({ icon, iconBg = colors.surfaceAlt, iconFg = colors.sub, title, subtitle, right, onPress, testID }: {
+  icon: IconName; iconBg?: string; iconFg?: string; title: string; subtitle?: string; right?: string; onPress: () => void; testID?: string;
 }) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}>
+    <Pressable accessibilityRole="button" testID={testID} onPress={onPress} style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}>
       <View style={[styles.rowIcon, { backgroundColor: iconBg }]}><Icon name={icon} color={iconFg} size={20} /></View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.rowTitle} numberOfLines={1}>{title}</Text>

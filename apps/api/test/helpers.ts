@@ -5,6 +5,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { CLOCK, Clock } from '../src/common/tokens';
+import { AuthService } from '../src/modules/auth/auth.service';
 
 export class FakeClock implements Clock {
   constructor(public t = Date.now()) {}
@@ -26,7 +27,16 @@ export async function createApp(opts: { clock?: Clock; env?: Record<string, stri
   return app;
 }
 
+/**
+ * A fresh guest user. Goes through AuthService directly so tests that need many users don't trip
+ * the per-IP rate limit on POST /auth/guest (that endpoint has its own HTTP tests).
+ */
 export async function guestToken(app: INestApplication): Promise<{ token: string; userId: string }> {
+  const t = await app.get(AuthService).guest();
+  return { token: t.accessToken, userId: t.userId };
+}
+
+export async function guestTokenViaHttp(app: INestApplication): Promise<{ token: string; userId: string }> {
   const res = await request(app.getHttpServer()).post('/v1/auth/guest').expect(200);
   return { token: res.body.accessToken, userId: res.body.userId };
 }

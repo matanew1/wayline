@@ -158,3 +158,23 @@ describe('NavigationSession — live ETA, faster routes, speed limits', () => {
     expect([...seen]).toEqual([50, 30, null]);
   });
 });
+
+describe('car guidance', () => {
+  it('summarises the session for a head unit', async () => {
+    const { carGuidance, carPlayManeuverType, androidAutoManeuverType } = await import('./car');
+    const ctx = setup();
+    const sim = new RouteSimulator(route.polyline6, { speedMs: 12 });
+    let s = ctx.session.snapshot;
+    for (let i = 0; i < 10; i++) { ctx.tick(); s = await ctx.session.onFix(sim.step(ctx.now())); }
+    const g = carGuidance(s, 'en', ctx.now());
+    expect(g.state).toBe('navigating');
+    expect(g.maneuver).toMatchObject({ kind: 'right', icon: 'right', instruction: 'Turn right onto Jabotinsky St', road: 'Jabotinsky St' });
+    expect(g.maneuver!.distanceM).toBeGreaterThan(400);
+    expect(g.then?.icon).toBe('left');
+    expect(g.remainingDistanceM).toBeLessThan(route.distanceM);
+    expect(g.etaEpochMs).toBeGreaterThan(ctx.now());
+    expect(carGuidance(s, 'he', ctx.now()).maneuver!.distanceText).toMatch(/מ׳|ק״מ/);
+    expect([carPlayManeuverType('right'), carPlayManeuverType('arrive')]).toEqual([2, 12]);
+    expect([androidAutoManeuverType('right'), androidAutoManeuverType('roundabout'), androidAutoManeuverType('ferry')]).toEqual([8, 45, 37]);
+  });
+});

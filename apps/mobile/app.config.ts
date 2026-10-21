@@ -3,6 +3,8 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
 /** APP_VARIANT=development | preview | production (set per EAS build profile). */
 const variant = process.env.APP_VARIANT ?? 'development';
 const isDev = variant === 'development';
+/** CarPlay / Android Auto (opt-in: needs Apple's CarPlay navigation entitlement + Google car-app review). */
+const car = process.env.WAYLINE_CAR === '1';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -52,6 +54,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ],
     // Dev builds talk to a local API over plain HTTP.
     ['expo-build-properties', { android: { usesCleartextTraffic: isDev } }],
+    ...(car ? ['./plugins/withCar'] : []),
   ],
   // Localised system strings (permission prompts, app name)
   locales: { en: './locales/en.json', he: './locales/he.json' },
@@ -60,5 +63,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     apiUrl: process.env.EXPO_PUBLIC_API_URL,
     mapStyleUrl: process.env.EXPO_PUBLIC_MAP_STYLE_URL,
     variant,
+    car,
   },
 });

@@ -140,6 +140,10 @@ const en = {
   bgBody: 'Wayline collects location data to give turn-by-turn directions and measure live traffic even when the app is closed or not in use, but only while you are navigating. Location points used for traffic are anonymous and never include the start or end of your trip.',
   bgAllow: 'Continue',
   bgNotNow: 'Not now',
+  // car (CarPlay / Android Auto)
+  carSetPlaces: 'Set Home and Work on your phone to start drives from the car.',
+  carRerouting: 'Finding a new route…',
+  carDriveTo: 'Drive to {name}',
 };
 
 export type StringKey = keyof typeof en;
@@ -275,6 +279,9 @@ const he: Strings = {
   bgBody: 'Wayline אוספת נתוני מיקום כדי לתת הנחיות ניווט ולמדוד עומסי תנועה גם כשהאפליקציה סגורה או לא בשימוש, אבל רק בזמן ניווט. נקודות המיקום למדידת עומסים אנונימיות ולעולם לא כוללות את תחילת הנסיעה או את סופה.',
   bgAllow: 'המשך',
   bgNotNow: 'לא עכשיו',
+  carSetPlaces: 'הגדירו בית ועבודה בטלפון כדי להתחיל נסיעות מהרכב.',
+  carRerouting: 'מחפש מסלול חדש…',
+  carDriveTo: 'נסיעה אל {name}',
 };
 
 export const STRINGS: Record<'en' | 'he', Strings> = { en, he };

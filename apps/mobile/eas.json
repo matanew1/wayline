@@ -10,6 +10,10 @@
       "distribution": "internal",
       "env": { "APP_VARIANT": "preview", "EXPO_PUBLIC_API_URL": "https://[STAGING_API_HOST]" }
     },
+    "production-car": {
+      "extends": "production",
+      "env": { "APP_VARIANT": "production", "EXPO_PUBLIC_API_URL": "https://[PRODUCTION_API_HOST]", "WAYLINE_CAR": "1" }
+    },
     "production": {
       "autoIncrement": true,
       "env": { "APP_VARIANT": "production", "EXPO_PUBLIC_API_URL": "https://[PRODUCTION_API_HOST]" }

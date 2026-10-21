@@ -43,7 +43,14 @@ jobs:
         run: npx expo prebuild --platform android --no-install
       - name: Build
         working-directory: apps/mobile/android
-        run: ./gradlew assembleDebug --no-daemon -PreactNativeArchitectures=x86_64
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --no-daemon -PreactNativeArchitectures=x86_64 2>&1 | tee gradle.log || {
+            # Kotlin/Java compiler errors and Gradle's "What went wrong" block, as annotations
+            grep -E "^e: |error:|Could not|Unresolved reference|> " gradle.log | grep -v "^> Task" | head -15 \
+              | while read -r l; do echo "::error title=gradle::${l:0:900}"; done
+            exit 1
+          }
       - name: Car service and metadata are in the merged manifest
         working-directory: apps/mobile/android/app/build
         run: |
@@ -77,10 +84,18 @@ jobs:
         if: matrix.car == '1'
         working-directory: apps/mobile/ios
         run: |
-          test -f WaylineDev/CarSceneDelegate.swift
-          grep -q carplay-maps WaylineDev/WaylineDev.entitlements
-          plutil -extract UIApplicationSceneManifest.UISceneConfigurations.CPTemplateApplicationSceneSessionRoleApplication json -o - WaylineDev/Info.plist
-          grep -q "react-native-carplay" Podfile.lock || { echo "::error::react-native-carplay pod not installed"; exit 1; }
+          fail=0
+          check() { if eval "$2"; then echo "::notice title=CarPlay::$1"; else echo "::error title=CarPlay::$1 — missing"; fail=1; fi; }
+          check "CarSceneDelegate.swift" 'test -f WaylineDev/CarSceneDelegate.swift'
+          check "carplay-maps entitlement" 'grep -q carplay-maps WaylineDev/*.entitlements'
+          check "CarPlay scene in Info.plist" '/usr/libexec/PlistBuddy -c "Print :UIApplicationSceneManifest:UISceneConfigurations:CPTemplateApplicationSceneSessionRoleApplication" WaylineDev/Info.plist'
+          check "car pod installed" 'grep -qi "carplay" Podfile.lock'
+          check "Swift file in Xcode project" 'grep -q CarSceneDelegate.swift WaylineDev.xcodeproj/project.pbxproj'
+          if [ $fail = 1 ]; then
+            echo "::error title=CarPlay::pods: $(grep -o '^  - [A-Za-z-]*' Podfile.lock | tr -d ' -' | tr '\n' ' ' | cut -c1-800)"
+            ls WaylineDev | tr '\n' ' ' | sed 's/^/::error title=files::/'; echo
+            exit 1
+          fi
       - name: Library not linked without the flag
         if: matrix.car == '0'
         working-directory: apps/mobile/ios

@@ -1,9 +1,9 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, I18nManager, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, I18nManager, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { currentUser, getAccessToken, requestOtp, signOut, verifyOtp } from '@/api/auth';
-import { savedPlaces } from '@/api/wayline';
+import { deleteAccount, savedPlaces } from '@/api/wayline';
 import { Icon } from '@/components/Icon';
 import { PrimaryButton } from '@/components/ui';
 import { useT } from '@/i18n';
@@ -56,6 +56,32 @@ export default function AccountScreen() {
     }
   }
 
+  function confirmDelete() {
+    Alert.alert(t('deleteConfirmTitle'), t('deleteConfirmBody'), [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('deleteConfirm'),
+        style: 'destructive',
+        onPress: async () => {
+          setBusy(true);
+          try {
+            await deleteAccount();
+            await signOut();
+            setSetting('phone', null);
+            set({ saved: [] });
+            await getAccessToken().catch(() => undefined); // continue as a new guest
+            toast(t('accountDeleted'));
+            router.back();
+          } catch (e) {
+            setError(e instanceof Error ? e.message : t('somethingWrong'));
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
+  }
+
   async function logout() {
     await signOut();
     setSetting('phone', null);
@@ -78,7 +104,13 @@ export default function AccountScreen() {
         {signedIn ? (
           <View style={{ gap: 16 }}>
             <Text style={styles.body}>{t('signedInAs', { phone: savedPhone ?? '' })}</Text>
-            <PrimaryButton title={t('signOut')} tone="secondary" onPress={() => void logout()} />
+            <PrimaryButton title={t('signOut')} tone="secondary" onPress={() => void logout()} testID="sign-out" />
+            {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+            {busy ? <ActivityIndicator color={colors.primary} /> : (
+              <Pressable accessibilityRole="button" onPress={confirmDelete} style={styles.danger} testID="delete-account">
+                <Text style={styles.dangerText}>{t('deleteAccount')}</Text>
+              </Pressable>
+            )}
           </View>
         ) : !sentTo ? (
           <View style={{ gap: 12 }}>
@@ -137,5 +169,7 @@ const styles = StyleSheet.create({
   input: { height: 52, borderRadius: 12, borderWidth: 2, borderColor: colors.primary, paddingHorizontal: 14, fontSize: 18, color: colors.ink },
   code: { letterSpacing: 8, textAlign: 'center', fontVariant: ['tabular-nums'] },
   error: { color: colors.danger, fontSize: 14, textAlign: 'left' },
+  danger: { marginTop: 24, padding: 14, alignItems: 'center' },
+  dangerText: { color: colors.danger, fontSize: 16, fontWeight: '700' },
   link: { color: colors.primary, fontSize: 15, fontWeight: '700', textAlign: 'center' },
 });

@@ -29,6 +29,17 @@ async function call<T>(p: Promise<{ data?: T; error?: unknown; response: Respons
 export const searchPlaces = (q: string, near?: LatLng) =>
   call<Place[]>(api.GET('/v1/places/search', { params: { query: { q, lat: near?.lat, lng: near?.lng, lang: lang() } } }));
 
+/** 204 No Content on success — no body, so not routed through `call`. */
+export async function deleteAccount(): Promise<void> {
+  let res;
+  try {
+    res = await api.DELETE('/v1/me');
+  } catch {
+    throw new ApiError(0, 'No connection to Wayline');
+  }
+  if (!res.response.ok) throw new ApiError(res.response.status, `Request failed (${res.response.status})`);
+}
+
 export const savedPlaces = () => call<SavedPlace[]>(api.GET('/v1/me/places'));
 
 export const savePlace = (body: { kind: 'home' | 'work' | 'fav'; name: string; address?: string; lat: number; lng: number }) =>

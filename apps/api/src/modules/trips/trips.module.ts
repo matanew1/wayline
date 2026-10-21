@@ -24,6 +24,7 @@ import { TripsService } from './trips.service';
       useFactory: (c: AppConfig) => (c.storeDriver === 'infra' ? new KafkaProbeSink(c.kafkaBrokers) : new MemoryProbeSink()),
     },
   ],
+  exports: [TRIPS_REPO],
 })
 export class TripsModule implements OnModuleDestroy {
   constructor(@Inject(PROBE_SINK) private readonly sink: ProbeSink) {}

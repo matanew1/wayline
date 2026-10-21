@@ -5,7 +5,9 @@ import type Redis from 'ioredis';
 import { REDIS } from './common/tokens';
 import { InfraModule } from './infra/infra.module';
 import { RedisThrottlerStorage } from './infra/redis-throttler.storage';
+import { AccountModule } from './modules/account/account.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { LegalModule } from './modules/legal/legal.controller';
 import { MetricsModule } from './observability/metrics';
 import { HealthController } from './modules/health/health.controller';
 import { PlacesModule } from './modules/places/places.module';
@@ -34,6 +36,8 @@ import { UsersModule } from './modules/users/users.module';
     TripsModule,
     ReportsModule,
     RealtimeModule,
+    AccountModule,
+    LegalModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

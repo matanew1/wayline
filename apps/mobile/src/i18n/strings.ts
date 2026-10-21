@@ -112,6 +112,7 @@ const en = {
   signedInAs: 'Signed in · {phone}',
   guestAccount: 'Guest — sign in to keep your places and reputation across phones',
   privacy: 'Privacy',
+  privacyPolicy: 'Privacy policy',
   privacyBody:
     'While you drive, Wayline sends anonymous GPS points to measure traffic. The first and last 300 m of every trip never leave your phone, and points are not linked to your account.',
   restartForLanguage: 'Wayline restarts to switch text direction',
@@ -129,6 +130,16 @@ const en = {
   signOut: 'Sign out',
   signedOut: 'Signed out — you’re a guest now',
   invalidPhone: 'Enter your number with country code, e.g. +972 50 123 4567',
+  deleteAccount: 'Delete account',
+  deleteConfirmTitle: 'Delete your account?',
+  deleteConfirmBody: 'Your saved places and trip history will be deleted. Reports you made stay on the map without your name. This can’t be undone.',
+  deleteConfirm: 'Delete',
+  accountDeleted: 'Account deleted',
+  // background location — prominent disclosure (Google Play policy), shown before the system prompt
+  bgTitle: 'Keep guiding when the screen is off',
+  bgBody: 'Wayline collects location data to give turn-by-turn directions and measure live traffic even when the app is closed or not in use, but only while you are navigating. Location points used for traffic are anonymous and never include the start or end of your trip.',
+  bgAllow: 'Continue',
+  bgNotNow: 'Not now',
 };
 
 export type StringKey = keyof typeof en;
@@ -238,6 +249,7 @@ const he: Strings = {
   signedInAs: 'מחובר · {phone}',
   guestAccount: 'אורח — התחברו כדי לשמור מקומות ומוניטין בין מכשירים',
   privacy: 'פרטיות',
+  privacyPolicy: 'מדיניות הפרטיות',
   privacyBody:
     'בזמן נסיעה Wayline שולחת נקודות GPS אנונימיות למדידת עומסים. 300 המטרים הראשונים והאחרונים של כל נסיעה לא יוצאים מהטלפון, והנקודות לא מקושרות לחשבון שלך.',
   restartForLanguage: 'Wayline תופעל מחדש כדי לשנות את כיוון הטקסט',
@@ -254,6 +266,15 @@ const he: Strings = {
   signOut: 'התנתקות',
   signedOut: 'התנתקת — את/ה עכשיו אורח',
   invalidPhone: 'הזינו מספר עם קידומת מדינה, למשל ‎+972 50 123 4567',
+  deleteAccount: 'מחיקת החשבון',
+  deleteConfirmTitle: 'למחוק את החשבון?',
+  deleteConfirmBody: 'המקומות השמורים והיסטוריית הנסיעות יימחקו. דיווחים שלך יישארו במפה בלי שמך. אי אפשר לבטל את הפעולה.',
+  deleteConfirm: 'מחיקה',
+  accountDeleted: 'החשבון נמחק',
+  bgTitle: 'הנחיות גם כשהמסך כבוי',
+  bgBody: 'Wayline אוספת נתוני מיקום כדי לתת הנחיות ניווט ולמדוד עומסי תנועה גם כשהאפליקציה סגורה או לא בשימוש, אבל רק בזמן ניווט. נקודות המיקום למדידת עומסים אנונימיות ולעולם לא כוללות את תחילת הנסיעה או את סופה.',
+  bgAllow: 'המשך',
+  bgNotNow: 'לא עכשיו',
 };
 
 export const STRINGS: Record<'en' | 'he', Strings> = { en, he };

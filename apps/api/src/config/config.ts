@@ -29,6 +29,8 @@ export interface AppConfig {
   metricsEnabled: boolean;
   /** JSON log lines (one object per line) — on by default in production. */
   jsonLogs: boolean;
+  /** Optional fixed sign-in for App Store / Play review: this number accepts this code, no SMS sent. */
+  review: { phone: string; code: string } | null;
 }
 
 const DEV_SECRET = 'dev-only-secret-change-me';
@@ -78,7 +80,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     },
     metricsEnabled: env.METRICS_ENABLED ? env.METRICS_ENABLED === 'true' : true,
     jsonLogs: env.LOG_FORMAT ? env.LOG_FORMAT === 'json' : prod,
+    review: env.REVIEW_PHONE && env.REVIEW_CODE ? { phone: env.REVIEW_PHONE, code: env.REVIEW_CODE } : null,
   };
+  if (config.review && !/^\d{6}$/.test(config.review.code)) throw new Error('REVIEW_CODE must be 6 digits');
   const t = config.twilio;
   const twilioMissing = config.smsDriver === 'twilio' && (!t.accountSid || !t.authToken || (!t.from && !t.messagingServiceSid));
   const twilioMsg = 'SMS_DRIVER=twilio needs TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM or TWILIO_MESSAGING_SERVICE_SID';

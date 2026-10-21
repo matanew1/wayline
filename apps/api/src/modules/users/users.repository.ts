@@ -18,6 +18,8 @@ export interface UsersRepository {
   findById(id: string): Promise<User | null>;
   /** Adds delta to trust_score, clamped (guests have a lower cap). Returns the new score. */
   adjustTrust(id: string, delta: number): Promise<number | null>;
+  /** Removes the user; votes cascade, reports keep their history with reporter_id set to NULL. */
+  delete(id: string): Promise<boolean>;
 }
 
 export class MemoryUsersRepository implements UsersRepository {
@@ -34,6 +36,10 @@ export class MemoryUsersRepository implements UsersRepository {
     if (!u) return null;
     u.trustScore = clampTrust(u.trustScore + delta, u.isGuest);
     return u.trustScore;
+  }
+
+  async delete(id: string) {
+    return this.byId.delete(id);
   }
 
   private insert(p: { phoneHash: string | null; isGuest: boolean }): User {
@@ -75,5 +81,9 @@ export class PgUsersRepository implements UsersRepository {
       [id, delta],
     );
     return rows[0] ? Number(rows[0].trust_score) : null;
+  }
+  async delete(id: string) {
+    const res = await this.pg.query(`DELETE FROM users WHERE id = $1`, [id]);
+    return (res.rowCount ?? 0) > 0;
   }
 }

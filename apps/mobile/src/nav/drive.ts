@@ -10,7 +10,7 @@ import {
 } from '@/api/wayline';
 import { startNavGps, startSimulated, type NavLocationSource } from '@/location/location';
 import { setSetting, settings, type AlertType } from '@/state/settings';
-import { get, removeReport, selectedRoute, set, toast, upsertReport, useApp, type Destination } from '@/state/store';
+import { askDisclosure, get, removeReport, selectedRoute, set, toast, upsertReport, useApp, type Destination } from '@/state/store';
 
 const KEEP_AWAKE_TAG = 'wayline-drive';
 
@@ -84,6 +84,14 @@ export function cancelPreview() {
 
 // ---------- driving ----------
 
+/** Background-location disclosure: shown until accepted once, then the system prompt decides. */
+async function discloseOnce(): Promise<boolean> {
+  if (settings().bgDisclosureAccepted) return true;
+  const ok = await askDisclosure();
+  if (ok) setSetting('bgDisclosureAccepted', true);
+  return ok;
+}
+
 export async function startDrive() {
   const s = get();
   const route = selectedRoute(s);
@@ -132,7 +140,7 @@ export async function startDrive() {
 
   let source: NavLocationSource;
   try {
-    source = settings().simulate && isDevBuild ? startSimulated(route.polyline6, onFix) : await startNavGps(onFix);
+    source = settings().simulate && isDevBuild ? startSimulated(route.polyline6, onFix) : await startNavGps(onFix, discloseOnce);
   } catch (e) {
     updateTrip(trip.tripId, { status: 'cancelled' }).catch(() => undefined);
     toast(t('locationUnavailable', { e: msg(e) }));

@@ -4,7 +4,7 @@ import { getAccessToken } from '@/api/auth';
 import { savedPlaces } from '@/api/wayline';
 import { HomePanel } from '@/components/HomePanel';
 import { NavPanel } from '@/components/NavPanel';
-import { ArrivedPanel, ReportSheet, Toast } from '@/components/Overlays';
+import { ArrivedPanel, LocationDisclosure, ReportSheet, Toast } from '@/components/Overlays';
 import { PreviewPanel } from '@/components/PreviewPanel';
 import { SearchPanel } from '@/components/SearchPanel';
 import { WaylineMap, type WaylineMapHandle } from '@/components/WaylineMap';
@@ -76,6 +76,7 @@ export default function MapScreen() {
       {screen === 'arrived' ? <ArrivedPanel /> : null}
       {screen === 'search' ? <SearchPanel /> : null}
       <ReportSheet />
+      <LocationDisclosure />
       <Toast />
     </View>
   );

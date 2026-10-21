@@ -34,6 +34,8 @@ export interface AppState {
   saved: SavedPlace[];
   /** Set when search is used to pick a Home/Work address. */
   savingKind: 'home' | 'work' | null;
+  /** Background-location disclosure dialog is open. */
+  disclosureOpen: boolean;
 }
 
 export const useApp = create<AppState>(() => ({
@@ -51,6 +53,7 @@ export const useApp = create<AppState>(() => ({
   toast: null,
   saved: [],
   savingKind: null,
+  disclosureOpen: false,
 }));
 
 export const set = useApp.setState;
@@ -84,3 +87,17 @@ export function pruneReports(now = Date.now()) {
 }
 
 export const selectedRoute = (s: AppState) => s.routes.find((r) => r.id === s.selectedRouteId) ?? null;
+
+let disclosureResolve: ((ok: boolean) => void) | null = null;
+
+/** Shows the background-location disclosure and resolves with the driver's choice. */
+export function askDisclosure(): Promise<boolean> {
+  set({ disclosureOpen: true });
+  return new Promise((resolve) => { disclosureResolve = resolve; });
+}
+
+export function answerDisclosure(ok: boolean) {
+  set({ disclosureOpen: false });
+  disclosureResolve?.(ok);
+  disclosureResolve = null;
+}

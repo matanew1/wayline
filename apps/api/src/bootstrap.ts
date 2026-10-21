@@ -10,6 +10,8 @@ export function configureApp(app: INestApplication): OpenAPIObject {
     { path: 'health', method: RequestMethod.GET },
     { path: 'health/live', method: RequestMethod.GET },
     { path: 'metrics', method: RequestMethod.GET },
+    { path: 'privacy', method: RequestMethod.GET },
+    { path: 'delete-account', method: RequestMethod.GET },
   ] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
   app.enableCors({ origin: config.corsOrigins });

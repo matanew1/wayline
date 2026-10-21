@@ -386,6 +386,31 @@ paths:
         - bearer: []
       tags:
         - reports
+  /v1/me:
+    get:
+      operationId: AccountController_me
+      parameters: []
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeDto'
+      security:
+        - bearer: []
+      tags:
+        - account
+    delete:
+      operationId: AccountController_remove
+      parameters: []
+      responses:
+        '204':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - account
 info:
   title: Wayline API
   description: 'Community-powered navigation. Realtime events: Socket.IO namespace /rt (see RealtimeGateway).'
@@ -980,3 +1005,20 @@ components:
         - status
         - confidence
         - expiresAt
+    MeDto:
+      type: object
+      properties:
+        id:
+          type: string
+        guest:
+          type: boolean
+        trustScore:
+          type: number
+          description: 0–1; seeds the confidence of your reports
+        createdAt:
+          type: string
+      required:
+        - id
+        - guest
+        - trustScore
+        - createdAt

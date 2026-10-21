@@ -10,6 +10,7 @@ export interface SavedPlacesRepository {
   save(userId: string, place: SavePlaceDto): Promise<SavedPlaceDto>;
   countFavourites(userId: string): Promise<number>;
   remove(userId: string, id: string): Promise<boolean>;
+  removeAll(userId: string): Promise<void>;
 }
 
 const isSingleton = (k: PlaceKind) => k === 'home' || k === 'work';
@@ -34,6 +35,9 @@ export class MemorySavedPlacesRepository implements SavedPlacesRepository {
   }
   async countFavourites(userId: string) {
     return this.of(userId).filter((p) => p.kind === 'fav').length;
+  }
+  async removeAll(userId: string) {
+    this.rows.delete(userId);
   }
   async remove(userId: string, id: string) {
     const list = this.of(userId);
@@ -69,6 +73,9 @@ export class PgSavedPlacesRepository implements SavedPlacesRepository {
   async countFavourites(userId: string) {
     const { rows } = await this.pg.query(`SELECT count(*)::int AS n FROM saved_places WHERE user_id = $1 AND kind = 'fav'`, [userId]);
     return rows[0].n as number;
+  }
+  async removeAll(userId: string) {
+    await this.pg.query(`DELETE FROM saved_places WHERE user_id = $1`, [userId]);
   }
   async remove(userId: string, id: string) {
     const res = await this.pg.query(`DELETE FROM saved_places WHERE user_id = $1 AND id = $2`, [userId, id]);

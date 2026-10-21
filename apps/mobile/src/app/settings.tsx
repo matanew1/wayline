@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { config } from '@/config';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { currentUser } from '@/api/auth';
 import { Icon } from '@/components/Icon';
@@ -36,7 +37,7 @@ function ToggleRow({ label, value, onChange }: { label: string; value: boolean; 
 }
 
 export default function SettingsScreen() {
-  const { t } = useT();
+  const { t, lang } = useT();
   const insets = useSafeAreaInsets();
   const s = useSettings();
   const user = currentUser();
@@ -103,6 +104,10 @@ export default function SettingsScreen() {
 
       <Section title={t('privacy')}>
         <Text style={[styles.rowText, styles.para]}>{t('privacyBody')}</Text>
+        <Pressable accessibilityRole="link" onPress={() => Linking.openURL(`${config.apiUrl}/privacy?lang=${lang}`)} style={styles.row}>
+          <Text style={[styles.rowText, { flex: 1, color: colors.primary }]}>{t('privacyPolicy')}</Text>
+          <Icon name="chevron" color={colors.muted} size={18} />
+        </Pressable>
       </Section>
 
       <Text style={styles.version}>{t('version', { v: Constants.expoConfig?.version ?? '—' })}</Text>

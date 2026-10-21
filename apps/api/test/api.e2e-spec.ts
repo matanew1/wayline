@@ -35,6 +35,23 @@ describe('Wayline API (in-memory drivers)', () => {
       await request(http).post('/v1/auth/refresh').send({ refreshToken: ok.body.accessToken }).expect(401); // access ≠ refresh
     });
 
+    it('lets the configured store-review number sign in with its fixed code, without SMS', async () => {
+      const { SMS_SENDER, CONFIG } = await import('../src/common/tokens');
+      const sms = app.get(SMS_SENDER);
+      const spy = jest.spyOn(sms, 'send');
+      const cfg = app.get(CONFIG);
+      cfg.review = { phone: '+972500000001', code: '424242' };
+      try {
+        await request(http).post('/v1/auth/otp').send({ phone: '+972500000001' }).expect(200);
+        expect(spy).not.toHaveBeenCalled();
+        const ok = await request(http).post('/v1/auth/verify').send({ phone: '+972500000001', code: '424242' }).expect(200);
+        expect(ok.body.guest).toBe(false);
+      } finally {
+        cfg.review = null;
+        spy.mockRestore();
+      }
+    });
+
     it('issues guest sessions over HTTP', async () => {
       const g = await guestTokenViaHttp(app);
       await request(http).get('/v1/me/places').set(auth(g.token)).expect(200);
@@ -217,6 +234,39 @@ describe('Wayline API (in-memory drivers)', () => {
     });
   });
 
+  describe('account', () => {
+    it('returns the profile and deletes the account with its personal data', async () => {
+      const phone = '+972521234000';
+      const otp = await request(http).post('/v1/auth/otp').send({ phone }).expect(200);
+      const login = (await request(http).post('/v1/auth/verify').send({ phone, code: otp.body.devCode }).expect(200)).body;
+      const h = auth(login.accessToken);
+
+      const me = await request(http).get('/v1/me').set(h).expect(200);
+      expect(me.body).toMatchObject({ id: login.userId, guest: false, trustScore: 0.5 });
+
+      await request(http).put('/v1/me/places').set(h).send({ kind: 'home', name: 'Home', lat: 32.1, lng: 34.8 }).expect(200);
+      const routes = await request(http).post('/v1/routes').set(h).send({ origin: { lat: 32.1, lng: 34.8 }, destination: { lat: 32.11, lng: 34.82 } }).expect(200);
+      await request(http).post('/v1/trips').set(h).send({ routeId: routes.body[0].id }).expect(201);
+      const rep = await request(http).post('/v1/reports').set(h).send({ type: 'closure', lat: 32.4, lng: 34.9, clientId: 'delete-test-01' }).expect(201);
+
+      await request(http).delete('/v1/me').set(h).expect(204);
+
+      // the old tokens stop working at once
+      await request(http).get('/v1/me/places').set(h).expect(401);
+      await request(http).post('/v1/auth/refresh').send({ refreshToken: login.refreshToken }).expect(401);
+      // the community report stays, without its reporter
+      const other = await guestToken(app);
+      const near = await request(http).get('/v1/reports/nearby').query({ lat: 32.4, lng: 34.9, radiusM: 500 }).set(auth(other.token)).expect(200);
+      expect(near.body.map((r: any) => r.id)).toContain(rep.body.id);
+      // signing in again with the same phone starts a fresh account (after the resend cooldown)
+      clock.advance(31_000);
+      const otp2 = await request(http).post('/v1/auth/otp').send({ phone }).expect(200);
+      const again = (await request(http).post('/v1/auth/verify').send({ phone, code: otp2.body.devCode }).expect(200)).body;
+      expect(again.userId).not.toBe(login.userId);
+      expect((await request(http).get('/v1/me/places').set(auth(again.accessToken)).expect(200)).body).toEqual([]);
+    });
+  });
+
   describe('trust score', () => {
     it('rises when others confirm a report and falls when it is voted away', async () => {
       const { USERS_REPO } = await import('../src/common/tokens');
@@ -243,6 +293,20 @@ describe('Wayline API (in-memory drivers)', () => {
       await new Promise((r) => setTimeout(r, 20));
       expect(await trustOf()).toBeCloseTo(confirmed - 0.05, 5);
     });
+  });
+
+  it('serves the privacy policy and account-deletion pages in both languages', async () => {
+    const en = await request(http).get('/privacy').expect(200);
+    expect(en.headers['content-type']).toContain('text/html');
+    expect(en.text).toContain('Wayline privacy policy');
+    expect(en.text).toContain('first and last 300 metres');
+    const he = await request(http).get('/privacy?lang=he').expect(200);
+    expect(he.text).toContain('dir="rtl"');
+    expect(he.text).toContain('מדיניות הפרטיות');
+    const del = await request(http).get('/delete-account').expect(200);
+    expect(del.text).toContain('Settings → Account → Delete account');
+    // the draft banner shows until the operator fills in the placeholders
+    expect(en.text).toContain('class="warn"');
   });
 
   it('exposes Prometheus metrics', async () => {

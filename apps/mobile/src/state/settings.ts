@@ -16,6 +16,8 @@ export interface Settings {
   recents: Place[];
   /** Phone number shown in Settings after sign-in (the server only stores a hash). */
   phone: string | null;
+  /** The background-location disclosure was shown and accepted. */
+  bgDisclosureAccepted: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -27,6 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   simulate: false,
   recents: [],
   phone: null,
+  bgDisclosureAccepted: false,
 };
 
 /** Persisted per-device preferences. Secrets (tokens) live in SecureStore, not here. */

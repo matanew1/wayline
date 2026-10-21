@@ -39,10 +39,12 @@ export class AuthService {
     if (!(await this.kv.setIfAbsent(`otp:cool:${ph}`, '1', OTP_COOLDOWN_S))) {
       throw new HttpException('Please wait before requesting another code', HttpStatus.TOO_MANY_REQUESTS);
     }
-    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    const review = this.config.review?.phone === phone;
+    const code = review ? this.config.review!.code : String(randomInt(0, 1_000_000)).padStart(6, '0');
     const rec: OtpRecord = { codeHash: this.sha(`${ph}:${code}`), attempts: 0 };
     await this.kv.set(`otp:${ph}`, JSON.stringify(rec), OTP_TTL_S);
-    await this.sms.send(phone, `Your Wayline code is ${code}`);
+    // the store-review number never triggers an SMS
+    if (!review) await this.sms.send(phone, `Your Wayline code is ${code}`);
 
     const res: OtpRequestedDto = { sentTo: phone.slice(0, 6) + '•••' + phone.slice(-4), expiresInS: OTP_TTL_S };
     if (this.config.otpDevEcho) res.devCode = code;

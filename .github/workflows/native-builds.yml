@@ -45,15 +45,15 @@ jobs:
         working-directory: apps/mobile/android
         run: |
           set -o pipefail
-          ./gradlew assembleDebug --no-daemon -PreactNativeArchitectures=x86_64 2>&1 | tee gradle.log || {
-            # Kotlin/Java compiler errors and Gradle's "What went wrong" block, as annotations
-            errs=$(grep -E "^e: |error:|Unresolved reference" gradle.log | sed 's|file:///home/runner/work/wayline/wayline/||' | sort -u)
-            n=$(printf '%s\n' "$errs" | grep -c . || true)
-            # one annotation with all compiler errors (GitHub caps error annotations per step at 10)
-            echo "::error title=gradle ($n errors)::$(printf '%s' "$errs" | head -c 60000 | awk 'BEGIN{ORS="%0A"}{gsub(/%/,"%25");print}')"
-            echo "::error title=gradle: what went wrong::$(grep -A8 "What went wrong" gradle.log | head -12 | awk 'BEGIN{ORS="%0A"}{gsub(/%/,"%25");print}')"
-            exit 1
-          }
+          ./gradlew assembleDebug --no-daemon -PreactNativeArchitectures=x86_64 > gradle.log 2>&1 && exit 0
+          set +e
+          enc() { head -c 60000 | awk 'BEGIN{ORS="%0A"}{gsub(/%/,"%25");gsub(/\r/,"");print}'; }
+          errs=$(grep -E "^e: |error:|Unresolved reference|ERROR:" gradle.log | sed 's|file:///home/runner/work/wayline/wayline/||' | sort -u)
+          [ -n "$errs" ] && echo "::error title=gradle errors::$(printf '%s' "$errs" | enc)"
+          echo "::error title=gradle: what went wrong::$(grep -A12 "What went wrong" gradle.log | head -30 | enc)"
+          echo "::error title=gradle: log tail::$(tail -40 gradle.log | enc)"
+          exit 1
+
       - name: Car service and metadata are in the merged manifest
         working-directory: apps/mobile/android/app/build
         run: |

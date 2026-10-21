@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Place, Report, RouteOption, SavedPlace } from '@wayline/contracts';
+import type { Report, RouteOption, SavedPlace } from '@wayline/contracts';
 import type { Fix, SessionSnapshot } from '@wayline/navigation-core';
 
 export type Screen = 'home' | 'search' | 'preview' | 'nav' | 'arrived';
@@ -29,14 +29,13 @@ export interface AppState {
   nav: SessionSnapshot<Report> | null;
   arrival: Arrival | null;
   reports: Record<string, Report>;
-  muted: boolean;
-  simulate: boolean;
   reportSheetOpen: boolean;
   toast: string | null;
-  recents: Place[];
   saved: SavedPlace[];
   /** Set when search is used to pick a Home/Work address. */
   savingKind: 'home' | 'work' | null;
+  /** Background-location disclosure dialog is open. */
+  disclosureOpen: boolean;
 }
 
 export const useApp = create<AppState>(() => ({
@@ -50,13 +49,11 @@ export const useApp = create<AppState>(() => ({
   nav: null,
   arrival: null,
   reports: {},
-  muted: false,
-  simulate: false,
   reportSheetOpen: false,
   toast: null,
-  recents: [],
   saved: [],
   savingKind: null,
+  disclosureOpen: false,
 }));
 
 export const set = useApp.setState;
@@ -90,3 +87,17 @@ export function pruneReports(now = Date.now()) {
 }
 
 export const selectedRoute = (s: AppState) => s.routes.find((r) => r.id === s.selectedRouteId) ?? null;
+
+let disclosureResolve: ((ok: boolean) => void) | null = null;
+
+/** Shows the background-location disclosure and resolves with the driver's choice. */
+export function askDisclosure(): Promise<boolean> {
+  set({ disclosureOpen: true });
+  return new Promise((resolve) => { disclosureResolve = resolve; });
+}
+
+export function answerDisclosure(ok: boolean) {
+  set({ disclosureOpen: false });
+  disclosureResolve?.(ok);
+  disclosureResolve = null;
+}

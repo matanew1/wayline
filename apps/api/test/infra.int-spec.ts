@@ -111,6 +111,26 @@ describe('API on Postgres + Redis', () => {
     expect(rows[0].ended_at).not.toBeNull();
   });
 
+  it('account deletion removes personal data and anonymises reports', async () => {
+    const { body: g } = await request(http).post('/v1/auth/guest').expect(200);
+    const h = auth(g.accessToken);
+    await request(http).put('/v1/me/places').set(h).send({ kind: 'work', name: 'Work', lat: 32.1, lng: 34.8 }).expect(200);
+    const routes = await request(http).post('/v1/routes').set(h).send({ origin: { lat: 32.1, lng: 34.8 }, destination: { lat: 32.11, lng: 34.82 } }).expect(200);
+    await request(http).post('/v1/trips').set(h).send({ routeId: routes.body[0].id }).expect(201);
+    const rep = await request(http).post('/v1/reports').set(h).send({ type: 'camera', lat: 32.5, lng: 34.95, clientId: 'int-delete-01' }).expect(201);
+    await waitFor(async () => ((await db.query('SELECT 1 FROM reports WHERE id = $1', [rep.body.id])).rowCount ? true : undefined));
+
+    await request(http).delete('/v1/me').set(h).expect(204);
+    await request(http).get('/v1/me').set(h).expect(401);
+
+    const count = async (sql: string) => (await db.query(sql, [g.userId])).rows[0].n;
+    expect(await count('SELECT count(*)::int AS n FROM users WHERE id = $1')).toBe(0);
+    expect(await count('SELECT count(*)::int AS n FROM trips WHERE user_id = $1')).toBe(0);
+    expect(await count('SELECT count(*)::int AS n FROM saved_places WHERE user_id = $1')).toBe(0);
+    const { rows } = await db.query('SELECT reporter_id FROM reports WHERE id = $1', [rep.body.id]);
+    expect(rows[0].reporter_id).toBeNull();
+  });
+
   it('reports: Redis GEO for live data, Postgres for history', async () => {
     const users = await Promise.all([0, 1, 2].map(() => request(http).post('/v1/auth/guest').expect(200).then((r) => r.body)));
     const spot = { lat: 32.0701, lng: 34.7942 };

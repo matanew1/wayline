@@ -23,7 +23,14 @@ export interface RouteManeuver {
   beginShapeIndex: number;
 }
 
-/** Structurally identical to the API's RouteOptionDto. */
+export interface SpeedLimitSpan {
+  /** metres along the route (in the route's distanceM scale) */
+  fromM: number;
+  toM: number;
+  kmh: number;
+}
+
+/** Structurally compatible with the API's RouteOptionDto. */
 export interface NavRoute {
   id: string;
   polyline6: string;
@@ -32,6 +39,7 @@ export interface NavRoute {
   maneuvers: RouteManeuver[];
   flags: string[];
   cells: string[];
+  speedLimits?: SpeedLimitSpan[];
 }
 
 /** Anything with a position — reports from the API fit. */

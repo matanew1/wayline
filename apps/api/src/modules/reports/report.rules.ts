@@ -19,6 +19,16 @@ export const MERGE_HEADING_DEG = 45;
 export const NOT_THERE_TO_EXPIRE = 2;
 export const REPORTS_PER_HOUR = 10;
 
+/** Trust (0..1) seeds the confidence of a driver's future reports. */
+export const TRUST_ON_CONFIRM = 0.02;
+export const TRUST_ON_REJECT = -0.05;
+export const GUEST_TRUST_CAP = 0.5;
+export const USER_TRUST_CAP = 1;
+
+export function clampTrust(trust: number, guest: boolean): number {
+  return Math.round(Math.min(guest ? GUEST_TRUST_CAP : USER_TRUST_CAP, Math.max(0, trust)) * 1000) / 1000;
+}
+
 export interface Report {
   id: string;
   type: ReportType;

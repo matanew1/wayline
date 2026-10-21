@@ -11,3 +11,8 @@ apps/mobile/ios/
 apps/mobile/dist-check/
 apps/mobile/expo-env.d.ts
 packages/*/dist/
+.valhalla-test/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+map-data-out/

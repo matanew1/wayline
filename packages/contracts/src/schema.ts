@@ -196,6 +196,22 @@ export interface paths {
         patch: operations["TripsController_update"];
         trace?: never;
     };
+    "/v1/trips/{id}/eta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["TripsController_eta"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/probes": {
         parameters: {
             query?: never;
@@ -255,6 +271,22 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AccountController_me"];
+        put?: never;
+        post?: never;
+        delete: operations["AccountController_remove"];
         options?: never;
         head?: never;
         patch?: never;
@@ -364,6 +396,26 @@ export interface components {
             /** @description Index into the decoded polyline where this maneuver starts */
             beginShapeIndex: number;
         };
+        SpeedLimitSpanDto: {
+            /** @description metres along the route */
+            fromM: number;
+            toM: number;
+            kmh: number;
+        };
+        CongestionSpanDto: {
+            fromM: number;
+            toM: number;
+            /** @enum {string} */
+            level: "slow" | "jam";
+        };
+        RouteTrafficDto: {
+            /** @description Duration without live traffic */
+            baseDurationS: number;
+            /** @description Edges priced with live speeds */
+            liveEdges: number;
+            totalEdges: number;
+            congestion: components["schemas"]["CongestionSpanDto"][];
+        };
         RouteOptionDto: {
             /** @description Pass to POST /trips; valid for 30 minutes */
             id: string;
@@ -375,6 +427,10 @@ export interface components {
             flags: ("toll" | "highway" | "ferry")[];
             /** @description Geohash-6 cells to subscribe to on the realtime gateway */
             cells: string[];
+            /** @description Posted limits along the route (gaps = unknown) */
+            speedLimits: components["schemas"]["SpeedLimitSpanDto"][];
+            /** @description null when edge data was unavailable */
+            traffic: components["schemas"]["RouteTrafficDto"] | null;
         };
         StartTripDto: {
             /** @description Route id from POST /routes */
@@ -401,6 +457,21 @@ export interface components {
             distanceM: number;
             startedAt: string;
             endedAt?: string;
+        };
+        EtaRequestDto: {
+            /** @description Current position. Used for this calculation only — not stored. */
+            lat: number;
+            lng: number;
+        };
+        EtaDto: {
+            /** @description Traffic-adjusted time left on the current route */
+            remainingS: number;
+            /** @description Distance from the route; large values mean the driver is off route */
+            offRouteM: number;
+            liveEdges: number;
+            /** @description Present when a route at least FASTER_ROUTE_MIN_SAVING_S faster exists */
+            fasterRoute?: components["schemas"]["RouteOptionDto"];
+            savingS?: number;
         };
         ProbeFixDto: {
             /** @description Unix epoch milliseconds */
@@ -461,6 +532,13 @@ export interface components {
             status: "active" | "expired";
             confidence: number;
             expiresAt: string;
+        };
+        MeDto: {
+            id: string;
+            guest: boolean;
+            /** @description 0–1; seeds the confidence of your reports */
+            trustScore: number;
+            createdAt: string;
         };
     };
     responses: never;
@@ -760,6 +838,31 @@ export interface operations {
             };
         };
     };
+    TripsController_eta: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EtaRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EtaDto"];
+                };
+            };
+        };
+    };
     TripsController_probes: {
         parameters: {
             query?: never;
@@ -852,6 +955,42 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ReportDto"][];
                 };
+            };
+        };
+    };
+    AccountController_me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeDto"];
+                };
+            };
+        };
+    };
+    AccountController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

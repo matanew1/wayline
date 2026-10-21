@@ -30,9 +30,6 @@ export const reportColors: Record<string, string> = {
   camera: '#0F766E',
 };
 
-export const reportLabels: Record<string, string> = {
-  traffic: 'Traffic', police: 'Police', crash: 'Crash', hazard: 'Hazard', closure: 'Closure', camera: 'Camera',
-};
 
 export const radius = { sheet: 24, card: 16, button: 14, pill: 999 } as const;
 

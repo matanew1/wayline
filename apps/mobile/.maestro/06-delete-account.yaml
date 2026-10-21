@@ -1,0 +1,23 @@
+# Store requirement: in-app account deletion. Signs in, deletes, and lands back as a guest.
+appId: com.wayline.app.dev
+name: Delete account
+tags: [account, store]
+env:
+  PHONE: "+972500000001"
+  CODE: "246810"
+---
+- runFlow:
+    file: 05-sign-in.yaml
+    env:
+      PHONE: ${PHONE}
+      CODE: ${CODE}
+- tapOn:
+    id: delete-account
+- assertVisible: "Delete your account?"
+- tapOn: "Delete"
+- extendedWaitUntil:
+    visible:
+      id: phone-input
+    timeout: 15000
+- assertNotVisible:
+    id: sign-out

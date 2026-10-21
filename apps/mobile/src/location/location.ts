@@ -40,12 +40,16 @@ export async function ensureForegroundPermission(): Promise<boolean> {
   return (await Location.requestForegroundPermissionsAsync()).granted;
 }
 
-/** Ask for "Always" only when a drive starts — that's when the reason is obvious to the driver. */
-async function ensureBackgroundPermission(): Promise<boolean> {
+/**
+ * Ask for "Always" only when a drive starts — that's when the reason is obvious to the driver.
+ * `disclose` shows our own explanation first (required by Google Play before the system prompt).
+ */
+async function ensureBackgroundPermission(disclose: () => Promise<boolean>): Promise<boolean> {
   try {
     const cur = await Location.getBackgroundPermissionsAsync();
     if (cur.granted) return true;
     if (!cur.canAskAgain) return false;
+    if (!(await disclose())) return false;
     return (await Location.requestBackgroundPermissionsAsync()).granted;
   } catch {
     return false; // e.g. Expo Go, where background location isn't available
@@ -69,9 +73,9 @@ export interface NavLocationSource {
 }
 
 /** 1 Hz navigation-grade updates that keep flowing with the screen off when "Always" is granted. */
-export async function startNavGps(onFix: Listener): Promise<NavLocationSource> {
+export async function startNavGps(onFix: Listener, disclose: () => Promise<boolean>): Promise<NavLocationSource> {
   navListeners.add(onFix);
-  if (await ensureBackgroundPermission()) {
+  if (await ensureBackgroundPermission(disclose)) {
     await Location.startLocationUpdatesAsync(NAV_LOCATION_TASK, {
       accuracy: Location.Accuracy.BestForNavigation,
       timeInterval: 1000,

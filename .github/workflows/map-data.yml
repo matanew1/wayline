@@ -1,0 +1,41 @@
+name: map-data
+
+# Rebuilds routing tiles and the basemap from the latest OpenStreetMap extract.
+# Artifacts are kept 30 days; set MAP_DATA_S3_URI + AWS credentials secrets to publish to a bucket.
+on:
+  workflow_dispatch:
+    inputs:
+      area: { description: "Geofabrik area (asia/<area>-latest.osm.pbf)", default: israel-and-palestine }
+  schedule:
+    - cron: "17 2 2 * *" # monthly
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build routing tiles + basemap
+        run: infra/map-data/build.sh --area "${{ inputs.area || 'israel-and-palestine' }}" --out map-data-out
+        env:
+          MAP_DATA_S3_URI: ${{ secrets.MAP_DATA_S3_URI }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      - name: Smoke-test the routing tiles
+        run: |
+          docker run -d --name vh -p 8002:8002 -v "$PWD/map-data-out/valhalla:/custom_files" \
+            -e use_tiles_ignore_pbf=True -e serve_tiles=True ghcr.io/nilsnolde/docker-valhalla/valhalla:latest
+          for i in $(seq 1 60); do curl -sf localhost:8002/status >/dev/null && break; sleep 2; done
+          # Tel Aviv → Jerusalem must route
+          curl -sf -XPOST localhost:8002/route -H 'content-type: application/json' \
+            -d '{"locations":[{"lat":32.0853,"lon":34.7818},{"lat":31.7683,"lon":35.2137}],"costing":"auto"}' \
+            | python3 -c "import json,sys; t=json.load(sys.stdin)['trip']; assert t['summary']['length'] > 50, t; print('ok', t['summary'])"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: map-data
+          retention-days: 30
+          path: |
+            map-data-out/valhalla/valhalla_tiles.tar
+            map-data-out/israel.pmtiles
+            map-data-out/manifest.json

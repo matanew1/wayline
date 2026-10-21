@@ -1,5 +1,7 @@
+// Tracing must patch modules before anything else loads them.
+import './observability/tracing';
 import 'reflect-metadata';
-import { Logger } from '@nestjs/common';
+import { ConsoleLogger, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { configureApp } from './bootstrap';
@@ -8,7 +10,8 @@ import { CONFIG } from './common/tokens';
 import { RedisIoAdapter } from './modules/realtime/redis-io.adapter';
 
 async function main() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: false });
+  const json = process.env.LOG_FORMAT ? process.env.LOG_FORMAT === 'json' : process.env.NODE_ENV === 'production';
+  const app = await NestFactory.create(AppModule, { logger: new ConsoleLogger({ json, colors: !json }) });
   const config = app.get<AppConfig>(CONFIG);
 
   if (config.storeDriver === 'infra') {

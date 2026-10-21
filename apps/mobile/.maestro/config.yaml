@@ -1,0 +1,17 @@
+# Maestro device tests — run against a development build (APP_VARIANT=development) on a simulator
+# or emulator, with the API running locally (`npm run dev` at the repo root) using:
+#   memory drivers (.env.example defaults) and
+#   REVIEW_PHONE=+972500000001 REVIEW_CODE=246810   (fixed sign-in for tests; no SMS sent)
+# Run:  maestro test .maestro            (all flows, in the order below)
+#       maestro test .maestro/02-search-and-drive.yaml
+flows:
+  - "*"   # top-level flows only; subflows/ is reused by them
+executionOrder:
+  continueOnFailure: false
+  flowsOrder:   # flow `name`s
+    - Guest start
+    - Search and simulated drive
+    - Report a hazard
+    - Hebrew and RTL
+    - Phone sign-in
+    - Delete account

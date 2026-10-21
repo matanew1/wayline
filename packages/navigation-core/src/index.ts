@@ -7,4 +7,5 @@ export { VoicePlanner, thresholds as voiceThresholds, phrase, type VoiceStage } 
 export { ReportAlertPlanner, type ReportAhead, type AlertOptions } from './report-alerts';
 export { ProbeBuffer, type SendResult, type ProbeBufferOptions } from './probe-buffer';
 export { RouteSimulator, type SimulatorOptions } from './simulator';
-export { NavigationSession, type SessionDeps, type SessionSnapshot, type SessionPhase, type SessionOptions } from './session';
+export { NavigationSession, type SessionDeps, type SessionSnapshot, type SessionPhase, type SessionOptions, type EtaCheck, type RouteOffer } from './session';
+export { carGuidance, carIcon, carPlayManeuverType, androidAutoManeuverType, type CarGuidance, type CarManeuver, type CarIcon } from './car';

@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '../../common/auth';
 import { CONFIG, SMS_SENDER } from '../../common/tokens';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { LogSmsSender } from './sms';
+import { createSmsSender } from './sms';
 
 @Global()
 @Module({
@@ -16,7 +16,7 @@ import { LogSmsSender } from './sms';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard, { provide: SMS_SENDER, useClass: LogSmsSender }],
+  providers: [AuthService, JwtAuthGuard, { provide: SMS_SENDER, inject: [CONFIG], useFactory: createSmsSender }],
   exports: [JwtModule, JwtAuthGuard],
 })
 export class AuthModule {}

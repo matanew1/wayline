@@ -1,6 +1,8 @@
 import { createWaylineClient, type Place, type Report, type ReportType, type RouteOption, type SavedPlace } from '@wayline/contracts';
 import type { Fix, LatLng, SendResult } from '@wayline/navigation-core';
 import { config } from '@/config';
+import { lang } from '@/i18n';
+import { settings } from '@/state/settings';
 import { getAccessToken } from './auth';
 
 export const api = createWaylineClient(config.apiUrl, getAccessToken);
@@ -25,7 +27,18 @@ async function call<T>(p: Promise<{ data?: T; error?: unknown; response: Respons
 }
 
 export const searchPlaces = (q: string, near?: LatLng) =>
-  call<Place[]>(api.GET('/v1/places/search', { params: { query: { q, lat: near?.lat, lng: near?.lng } } }));
+  call<Place[]>(api.GET('/v1/places/search', { params: { query: { q, lat: near?.lat, lng: near?.lng, lang: lang() } } }));
+
+/** 204 No Content on success — no body, so not routed through `call`. */
+export async function deleteAccount(): Promise<void> {
+  let res;
+  try {
+    res = await api.DELETE('/v1/me');
+  } catch {
+    throw new ApiError(0, 'No connection to Wayline');
+  }
+  if (!res.response.ok) throw new ApiError(res.response.status, `Request failed (${res.response.status})`);
+}
 
 export const savedPlaces = () => call<SavedPlace[]>(api.GET('/v1/me/places'));
 
@@ -35,8 +48,15 @@ export const savePlace = (body: { kind: 'home' | 'work' | 'fav'; name: string; a
 /** The API rejects unknown fields, so strip Fix/Place objects down to coordinates. */
 const pt = (p: LatLng): LatLng => ({ lat: p.lat, lng: p.lng });
 
-export const planRoutes = (origin: LatLng, destination: LatLng) =>
-  call<RouteOption[]>(api.POST('/v1/routes', { body: { origin: pt(origin), destination: pt(destination), language: config.language } }));
+export function planRoutes(origin: LatLng, destination: LatLng) {
+  const s = settings();
+  const avoid = [...(s.avoidTolls ? ['tolls' as const] : []), ...(s.avoidHighways ? ['highways' as const] : [])];
+  return call<RouteOption[]>(api.POST('/v1/routes', { body: { origin: pt(origin), destination: pt(destination), language: lang(), avoid } }));
+}
+
+/** Live ETA for the trip + a faster route when traffic makes one worthwhile. */
+export const tripEta = (tripId: string, at: LatLng) =>
+  call(api.POST('/v1/trips/{id}/eta', { params: { path: { id: tripId } }, body: pt(at) }));
 
 export const startTrip = (routeId: string) => call(api.POST('/v1/trips', { body: { routeId } }));
 

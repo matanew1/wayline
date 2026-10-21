@@ -1,0 +1,12 @@
+# First launch: a guest session is created silently and the home sheet shows.
+appId: com.wayline.app.dev
+name: Guest start
+tags: [smoke]
+---
+- runFlow: subflows/launch.yaml
+- assertVisible: "Where to?"
+- assertVisible:
+    id: home-row
+- assertVisible:
+    id: work-row
+- assertNotVisible: "Location is off"

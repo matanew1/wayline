@@ -1,0 +1,22 @@
+# Switch to Hebrew (the app restarts into right-to-left layout), then back to English.
+appId: com.wayline.app.dev
+name: Hebrew and RTL
+tags: [i18n]
+---
+- runFlow: subflows/launch.yaml
+- tapOn:
+    id: open-settings
+- tapOn:
+    id: language-he
+# Switching direction reloads the app.
+- extendedWaitUntil:
+    visible: "לאן נוסעים?"
+    timeout: 30000
+- tapOn:
+    id: open-settings
+- assertVisible: "הגדרות"
+- tapOn:
+    id: language-en
+- extendedWaitUntil:
+    visible: "Where to?"
+    timeout: 30000

@@ -49,6 +49,25 @@ export class ManeuverDto {
   @ApiProperty({ description: 'Index into the decoded polyline where this maneuver starts' }) beginShapeIndex: number;
 }
 
+export class SpeedLimitSpanDto {
+  @ApiProperty({ description: 'metres along the route' }) fromM: number;
+  @ApiProperty() toM: number;
+  @ApiProperty() kmh: number;
+}
+
+export class CongestionSpanDto {
+  @ApiProperty() fromM: number;
+  @ApiProperty() toM: number;
+  @ApiProperty({ enum: ['slow', 'jam'] }) level: 'slow' | 'jam';
+}
+
+export class RouteTrafficDto {
+  @ApiProperty({ description: 'Duration without live traffic' }) baseDurationS: number;
+  @ApiProperty({ description: 'Edges priced with live speeds' }) liveEdges: number;
+  @ApiProperty() totalEdges: number;
+  @ApiProperty({ type: [CongestionSpanDto] }) congestion: CongestionSpanDto[];
+}
+
 export class RouteOptionDto {
   @ApiProperty({ description: 'Pass to POST /trips; valid for 30 minutes' }) id: string;
   @ApiProperty({ description: 'Encoded polyline, precision 6' }) polyline6: string;
@@ -57,4 +76,6 @@ export class RouteOptionDto {
   @ApiProperty({ type: [ManeuverDto] }) maneuvers: ManeuverDto[];
   @ApiProperty({ enum: ROUTE_FLAGS, isArray: true }) flags: RouteFlag[];
   @ApiProperty({ type: [String], description: 'Geohash-6 cells to subscribe to on the realtime gateway' }) cells: string[];
+  @ApiProperty({ type: [SpeedLimitSpanDto], description: 'Posted limits along the route (gaps = unknown)' }) speedLimits: SpeedLimitSpanDto[];
+  @ApiProperty({ type: RouteTrafficDto, nullable: true, description: 'null when edge data was unavailable' }) traffic: RouteTrafficDto | null;
 }

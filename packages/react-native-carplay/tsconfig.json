@@ -1,0 +1,19 @@
+{
+  "//": "Declarations only. The TS sources predate React Native 0.88's stricter typings (NativeEventEmitter, NativeModule), so they are emitted without type-checking; Metro bundles src/ directly.",
+  "compilerOptions": {
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noCheck": true,
+    "outDir": "types",
+    "rootDir": "src",
+    "jsx": "react-jsx",
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "customConditions": ["react-native"],
+    "target": "ESNext",
+    "lib": ["DOM", "ESNext"],
+    "skipLibCheck": true,
+    "strict": true
+  },
+  "include": ["src"]
+}

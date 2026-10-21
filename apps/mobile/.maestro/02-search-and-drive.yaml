@@ -1,0 +1,41 @@
+# Search → route preview → simulated drive → end drive.
+appId: com.wayline.app.dev
+name: Search and simulated drive
+tags: [smoke, nav]
+---
+- runFlow: subflows/launch.yaml
+- tapOn:
+    id: where-to
+- inputText: Grand Mall   # a sample place of the API memory geocoder
+- extendedWaitUntil:
+    visible:
+      id: search-result-0
+    timeout: 15000
+- tapOn:
+    id: search-result-0
+- extendedWaitUntil:
+    visible:
+      id: route-0
+    timeout: 20000
+# Simulated drive (dev builds only) follows the route without real GPS movement.
+- tapOn:
+    id: simulate-switch
+- tapOn:
+    id: go
+- extendedWaitUntil:
+    visible:
+      id: nav-banner
+    timeout: 15000
+- assertVisible:
+    id: end-drive
+# Guidance is live: the banner stays up while the simulated car moves along the route.
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible:
+    id: nav-banner
+- tapOn:
+    id: end-drive
+- extendedWaitUntil:
+    visible:
+      id: where-to
+    timeout: 10000

@@ -6,7 +6,14 @@ import { CONFIG } from './common/tokens';
 /** Shared by main.ts, e2e tests and the OpenAPI exporter so they all see the same app. */
 export function configureApp(app: INestApplication): OpenAPIObject {
   const config = app.get<AppConfig>(CONFIG);
-  app.setGlobalPrefix('v1', { exclude: [{ path: 'health', method: RequestMethod.GET }, { path: 'health/live', method: RequestMethod.GET }] });
+  app.setGlobalPrefix('v1', { exclude: [
+    { path: 'health', method: RequestMethod.GET },
+    { path: 'health/live', method: RequestMethod.GET },
+    { path: 'metrics', method: RequestMethod.GET },
+    { path: 'privacy', method: RequestMethod.GET },
+    { path: 'delete-account', method: RequestMethod.GET },
+    { path: 'map/style.json', method: RequestMethod.GET },
+  ] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
   app.enableCors({ origin: config.corsOrigins });
   app.enableShutdownHooks();

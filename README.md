@@ -219,11 +219,11 @@ rebuild CronJob); `.github/workflows/map-data.yml` builds on demand and on a sch
 
 ## Before launch (needs accounts, devices or approvals — not code)
 
-- **Run on real phones and cars.** Everything is verified by tests, typecheck, lint, Metro bundles and
-  native config generation; the Maestro flows run on an Android emulator in CI. Still to check by
-  hand: guidance with the screen off, audio ducking, Android 14 foreground-service behaviour, iOS
-  background location, and CarPlay / Android Auto in a car or the simulators (the native car library
-  can't be compiled in this environment).
+- **Run on real phones and cars.** Everything is verified by tests, typecheck, lint, Metro bundles,
+  the Maestro flows on an Android emulator, and native compiles in CI (iOS simulator with and
+  without CarPlay, Android with Android Auto — `.github/workflows/native-builds.yml`). Still to check
+  by hand: guidance with the screen off, audio ducking, Android 14 foreground-service behaviour, iOS
+  background location, and the car screens in the CarPlay Simulator / Android Auto Desktop Head Unit.
 - **Twilio:** account, a Messaging Service, and an alphanumeric sender ID registered for Israel.
 - **Apple / Google approvals:** CarPlay navigation entitlement (request from Apple for your team),
   Android Auto car-app review, background-location review (the video and justification are scripted

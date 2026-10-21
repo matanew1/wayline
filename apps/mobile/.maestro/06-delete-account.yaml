@@ -13,11 +13,20 @@ env:
       CODE: ${CODE}
 - tapOn:
     id: delete-account
-- assertVisible: "Delete your account?"
-- tapOn: "Delete"
+- extendedWaitUntil:
+    visible: "Delete your account\\?"
+    timeout: 5000
+- tapOn: "(?i)^delete$"   # the dialog's confirm button (Android may render it upper-case)
+# deleting closes the account screen; reopening it shows the sign-in form of a fresh guest
+- extendedWaitUntil:
+    visible:
+      id: open-account
+    timeout: 15000
+- tapOn:
+    id: open-account
 - extendedWaitUntil:
     visible:
       id: phone-input
-    timeout: 15000
+    timeout: 10000
 - assertNotVisible:
     id: sign-out

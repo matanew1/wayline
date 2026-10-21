@@ -24,10 +24,10 @@ jobs:
       # the emulator reaches the host at 10.0.2.2
       EXPO_PUBLIC_API_URL: http://10.0.2.2:3000
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 22, cache: npm }
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: "17" }
       - run: npm ci
 
@@ -70,15 +70,20 @@ jobs:
           target: google_apis
           disable-animations: true
           script: |
-            adb install apps/mobile/android/app/build/outputs/apk/release/app-release.apk
-            cd apps/mobile && maestro test .maestro --format junit --output ../../maestro-report.xml
+            adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk || (echo "::error title=adb install::APK install failed" && exit 1)
+            cd apps/mobile && maestro test .maestro --format junit --output ../../maestro-report.xml --debug-output ../../maestro-debug
+
+      # Results as annotations, so they're readable from the run page / API without downloading logs.
+      - name: Report flow results
+        if: always()
+        run: python3 .github/scripts/maestro-annotate.py maestro-report.xml maestro-debug
 
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: maestro
           path: |
             maestro-report.xml
+            maestro-debug/
             api.log
-            ~/.maestro/tests/
           if-no-files-found: ignore

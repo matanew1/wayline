@@ -21,15 +21,42 @@ env:
     visible:
       id: code-input
     timeout: 15000
-- tapOn:
-    id: code-input
-- inputText: ${CODE}
+# Dev APIs echo the code and the app pre-fills it; only type it when the field is empty
+# (clearing and retyping a controlled input on Android can leave a mangled code).
+- runFlow:
+    when:
+      notVisible: ${CODE}
+    commands:
+      - tapOn:
+          id: code-input
+      - inputText: ${CODE}
 - hideKeyboard
 - tapOn:
     id: verify-code
+# If the API refused, fail with the app's own message so CI shows why.
+- extendedWaitUntil:
+    visible:
+      id: account-error
+    timeout: 4000
+    optional: true
+- runFlow:
+    when:
+      visible:
+        id: account-error
+    commands:
+      - copyTextFrom:
+          id: account-error
+      - assertVisible: "${'sign-in error shown in app - ' + maestro.copiedText}"
+# signing in closes the account screen and returns to Settings
+- extendedWaitUntil:
+    visible:
+      id: open-account
+    timeout: 15000
+- tapOn:
+    id: open-account
 - extendedWaitUntil:
     visible:
       id: sign-out
-    timeout: 15000
+    timeout: 10000
 - assertVisible:
     id: delete-account

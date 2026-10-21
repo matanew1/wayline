@@ -38,7 +38,7 @@ env:
     visible:
       id: account-error
     timeout: 4000
-  optional: true
+    optional: true
 - runFlow:
     when:
       visible:

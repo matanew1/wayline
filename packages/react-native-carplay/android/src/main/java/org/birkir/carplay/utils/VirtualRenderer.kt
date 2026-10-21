@@ -23,8 +23,7 @@ import androidx.car.app.SurfaceContainer
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
-import com.facebook.react.ReactApplication
-import com.facebook.react.ReactRootView
+import com.facebook.react.interfaces.fabric.ReactSurface
 import com.facebook.react.uimanager.DisplayMetricsHolder
 import org.birkir.carplay.BuildConfig
 
@@ -39,7 +38,9 @@ class VirtualRenderer(
   private val sessionLifecycle: Lifecycle
 ) {
 
-  private var rootView: ReactRootView? = null
+  // Fabric surface hosting the JS map component (bridgeless replacement for ReactRootView)
+  private var surface: ReactSurface? = null
+  private var rootView: ViewGroup? = null
   private var emitter: EventEmitter
 
   /**
@@ -50,8 +51,7 @@ class VirtualRenderer(
   val reactNativeScale = virtualScreenDensity / mainScreenDensity * BuildConfig.CARPLAY_SCALE_FACTOR
 
   init {
-    val reactContext =
-      (context.applicationContext as ReactApplication).reactNativeHost.reactInstanceManager.currentReactContext
+    val reactContext = ReactContextResolver.reactHost(context).currentReactContext
     emitter = EventEmitter(reactContext = reactContext, templateId = moduleName)
 
     val areaDebouncer = Debouncer(200)
@@ -59,7 +59,8 @@ class VirtualRenderer(
     sessionLifecycle.addObserver(object : DefaultLifecycleObserver {
       override fun onDestroy(owner: LifecycleOwner) {
         (rootView?.parent as? ViewGroup)?.removeView(rootView)
-        rootView?.unmountReactApplication()
+        surface?.stop()
+        surface = null
         rootView = null
         sessionLifecycle.removeObserver(this)
       }
@@ -186,9 +187,6 @@ class VirtualRenderer(
   ) : Presentation(context, display) {
     override fun onCreate(savedInstanceState: Bundle?) {
       super.onCreate(savedInstanceState)
-      val instanceManager =
-        (context.applicationContext as ReactApplication).reactNativeHost.reactInstanceManager
-
 
       var splashView: ViewGroup? = null
 
@@ -206,7 +204,10 @@ class VirtualRenderer(
           })
         }
 
-        rootView = ReactRootView(context.applicationContext).apply {
+        val reactSurface = ReactContextResolver.reactHost(context)
+          .createSurface(context.applicationContext, moduleName, initialProperties)
+        surface = reactSurface
+        rootView = (reactSurface.view ?: throw IllegalStateException("ReactSurface has no view")).apply {
           layoutParams = FrameLayout.LayoutParams(
             (surfaceContainer.width / reactNativeScale).toInt(), (surfaceContainer.height / reactNativeScale).toInt()
           )
@@ -216,8 +217,6 @@ class VirtualRenderer(
           pivotY = 0f
           setBackgroundColor(Color.DKGRAY)
 
-          startReactApplication(instanceManager, moduleName, initialProperties)
-          runApplication()
 
           splashView?.let {
             var splashWillDisappear = false
@@ -245,6 +244,7 @@ class VirtualRenderer(
             })
           }
         }
+        reactSurface.start()
       } else {
         (rootView?.parent as? ViewGroup)?.removeView(rootView)
       }

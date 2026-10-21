@@ -54,6 +54,10 @@ static NSMutableDictionary<NSNumber *, CPNavigationAlert *> *navigationAlertWrap
     };
 }
 
++ (void) setRootViewFactory:(UIView * (^)(NSString *moduleName, NSDictionary *initialProperties))factory {
+    RNCarPlayRootView.factory = factory;
+}
+
 + (void) connectWithInterfaceController:(CPInterfaceController*)interfaceController window:(CPWindow*)window {
     RNCPStore * store = [RNCPStore sharedManager];
     if (store.app == nil) {

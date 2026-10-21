@@ -13,13 +13,11 @@ import androidx.car.app.Session
 import androidx.car.app.SessionInfo
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import com.facebook.react.ReactInstanceManager
+import com.facebook.react.ReactHost
+import com.facebook.react.interfaces.fabric.ReactSurface
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.LifecycleEventListener
 import com.facebook.react.bridge.ReactContext
-import com.facebook.react.bridge.WritableNativeMap
-import com.facebook.react.modules.appregistry.AppRegistry
-import com.facebook.react.uimanager.ReactRootViewTagGenerator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -33,7 +31,7 @@ import java.util.UUID
 import java.util.WeakHashMap
 
 class CarPlaySession(
-  private val reactInstanceManager: ReactInstanceManager,
+  private val reactHost: ReactHost,
   private val sessionInfo: SessionInfo
 ) : Session(), DefaultLifecycleObserver, LifecycleEventListener {
   private lateinit var screen: CarScreen
@@ -41,6 +39,8 @@ class CarPlaySession(
   private lateinit var reactContext: ReactContext
   private lateinit var eventEmitter: EventEmitter
   private val clusterTemplateId = if (isCluster) UUID.randomUUID().toString() else null
+  /** headless surface running the JS "AndroidAuto" / "AndroidAutoCluster" app (bridgeless replacement for AppRegistry.runApplication) */
+  private var jsSurface: ReactSurface? = null
 
   val restartReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -69,7 +69,7 @@ class CarPlaySession(
     }
 
     CoroutineScope(Dispatchers.Main).launch {
-      this@CarPlaySession.reactContext = ReactContextResolver.getReactContext(reactInstanceManager)
+      this@CarPlaySession.reactContext = ReactContextResolver.getReactContext(reactHost)
       this@CarPlaySession.eventEmitter = EventEmitter(reactContext)
       reactContext.addLifecycleEventListener(this@CarPlaySession)
 
@@ -107,19 +107,12 @@ class CarPlaySession(
 
   private fun invokeStartTask() {
     try {
-      val catalystInstance = reactContext.catalystInstance
       val jsAppModuleName = if (isCluster) "AndroidAutoCluster" else "AndroidAuto"
-      val rootTag = ReactRootViewTagGenerator.getNextRootViewTag()
+      val initialProps = android.os.Bundle().apply { putString("id", clusterTemplateId) }
 
-      val appParams = WritableNativeMap().apply {
-        putInt("rootTag", rootTag)
-        putMap("initialProps", Arguments.createMap().apply {
-          putString("id", clusterTemplateId)
-        })
-      }
-
-      catalystInstance.getJSModule(AppRegistry::class.java)
-        ?.runApplication(jsAppModuleName, appParams)
+      // restart (APP_RELOAD) replaces the previous surface
+      jsSurface?.stop()
+      jsSurface = reactHost.createSurface(carContext, jsAppModuleName, initialProps).also { it.start() }
 
       if (isCluster) {
         // cluster displays hold only a single navigation template that is linked to the main navigation template for updates
@@ -136,6 +129,8 @@ class CarPlaySession(
 
   override fun onDestroy(owner: LifecycleOwner) {
     Log.i(TAG, "onDestroy")
+    jsSurface?.stop()
+    jsSurface = null
     if (isCluster) {
       reactContext.getNativeModule(CarPlayModule::class.java)?.clusterScreens?.remove(screen)
     }

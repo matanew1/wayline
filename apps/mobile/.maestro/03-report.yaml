@@ -10,9 +10,12 @@ tags: [smoke, reports]
     id: report-police
 - tapOn:
     id: report-hazard
+# the API accepted it: confirmation toast (shown ~2.4 s)
 - extendedWaitUntil:
-    notVisible:
-      id: report-police
+    visible: ".*(reported|confirmed) — thanks!"
     timeout: 10000
-- assertVisible:
-    id: where-to
+# the sheet is a sliding modal; wait for it to finish closing
+- extendedWaitUntil:
+    visible:
+      id: where-to
+    timeout: 10000

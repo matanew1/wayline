@@ -74,6 +74,11 @@ VALHALLA_URL=http://127.0.0.1:8002 npm run test:integration
 cd apps/traffic-worker && pip install -e '.[dev]' && pytest   # worker; integration needs VALHALLA_URL + REDIS_URL
 ```
 
+**Device tests** (Maestro, `apps/mobile/.maestro`): guest start, search + simulated drive, report,
+Hebrew/RTL, phone sign-in, account deletion. Run against a development build with the API on memory
+drivers and `REVIEW_PHONE=+972500000001 REVIEW_CODE=246810`: `cd apps/mobile && maestro test .maestro`.
+CI runs them on an Android emulator (`.github/workflows/e2e-android.yml`: PRs touching the app, nightly).
+
 ## API (v1)
 
 Full contract: `/docs` (Swagger UI) or `openapi.yaml`.
@@ -83,6 +88,9 @@ Full contract: `/docs` (Swagger UI) or `openapi.yaml`.
 | `POST /v1/auth/otp` · `/verify` · `/guest` · `/refresh` | Phone OTP sign-in (6 digits, 5 min, 5 attempts, 30 s resend cooldown), guest mode, JWT access (15 min) + refresh (30 d) |
 | `GET /v1/places/search` | Autocomplete, biased to a point |
 | `GET/PUT /v1/me/places`, `DELETE /v1/me/places/:id` | Home, Work (one each) and up to 50 favourites |
+| `GET /v1/me`, `DELETE /v1/me` | Account; deletion removes saved places and trips, keeps reports on the map unlinked, revokes tokens (probes are never linked to users) |
+| `GET /privacy`, `GET /delete-account` | Privacy policy and account-deletion pages (en/he) for the store listings |
+| `GET /map/style.json` | Basemap style for our tiles (`MAP_TILES_URL`), or a redirect to OpenFreeMap |
 | `POST /v1/routes` | Up to 3 alternatives ranked by live-traffic ETA: polyline6, maneuvers, flags, speed limits, congestion, realtime cells; honours `avoid` tolls/highways/ferries |
 | `POST /v1/trips`, `PATCH /v1/trips/:id` | Start (returns a probe token), reroute, finish/cancel (revokes the token) |
 | `POST /v1/trips/:id/eta` | Live remaining time + a faster route when it saves ≥ 3 min (position used once, not stored) |
@@ -174,9 +182,30 @@ which report types are spoken. **Account:** phone sign-in with SMS code; guests 
 | `development` | development | dev client, `com.wayline.app.dev`, cleartext HTTP allowed for a local API |
 | `preview` | preview | internal distribution, staging API |
 | `production` | production | store build; set `EXPO_PUBLIC_API_URL` |
+| `production-car` | production | same, with CarPlay / Android Auto (`WAYLINE_CAR=1`) |
 
-Map tiles default to OpenFreeMap (free, no key) — set `EXPO_PUBLIC_MAP_STYLE_URL` to your own
-PMTiles style for production.
+The map style comes from the API (`/map/style.json`): our own tiles when `MAP_TILES_URL` is set,
+OpenFreeMap otherwise. `EXPO_PUBLIC_MAP_STYLE_URL` overrides it.
+
+**CarPlay / Android Auto** (`src/car`) is opt-in at build time: `WAYLINE_CAR=1` links the vendored
+`packages/react-native-carplay` and applies `plugins/withCar.js` (CarPlay scene + entitlement,
+Android Auto `automotive_app_desc`). Normal builds don't link it. The car screen shows the map,
+Home / Work drives, the next maneuver and the one after, ETA and remaining distance, rerouting, and
+an End button — all from the same `NavigationSession` snapshot the phone uses (`carGuidance()` in
+navigation-core).
+
+**Store compliance:** in-app account deletion (Settings → Account), a prominent background-location
+disclosure before the first real drive (Google Play policy), privacy policy and deletion pages served
+by the API, and review sign-in (`REVIEW_PHONE` / `REVIEW_CODE`). Listing copy, data-safety /
+privacy-label answers and review notes: `docs/store/`.
+
+## Map data
+
+`infra/map-data/build.sh` builds both datasets from the Geofabrik Israel extract: Valhalla routing
+tiles (`valhalla_tiles.tar`) and a PMTiles basemap (Planetiler, OpenMapTiles schema, Hebrew / English /
+Arabic names). Docker by default; `--local` uses pyvalhalla. `MAP_DATA_S3_URI` uploads the result.
+Serving: Martin (`docker compose --profile tiles up -d`, `infra/k8s/base/tiles.yaml` with a monthly
+rebuild CronJob); `.github/workflows/map-data.yml` builds on demand and on a schedule.
 
 ## Deploy
 
@@ -188,15 +217,17 @@ PMTiles style for production.
   integration on PostGIS + Redis + Valhalla → worker tests → build → OpenAPI drift check → mobile
   (core tests, typecheck, lint, both bundles) → API and worker images (pushed to GHCR on `main`).
 
-## Before launch (needs accounts, devices or data — not code)
+## Before launch (needs accounts, devices or approvals — not code)
 
-- **Run on real phones.** Everything is verified by tests, typecheck, lint, Metro bundles and native
-  config generation, but not on a device yet: map rendering, guidance with the screen off, audio
-  ducking, Android 14 foreground-service behaviour, RTL layout in Hebrew.
+- **Run on real phones and cars.** Everything is verified by tests, typecheck, lint, Metro bundles and
+  native config generation; the Maestro flows run on an Android emulator in CI. Still to check by
+  hand: guidance with the screen off, audio ducking, Android 14 foreground-service behaviour, iOS
+  background location, and CarPlay / Android Auto in a car or the simulators (the native car library
+  can't be compiled in this environment).
 - **Twilio:** account, a Messaging Service, and an alphanumeric sender ID registered for Israel.
-- **Map data:** build Valhalla tiles and a PMTiles basemap from the Israel OSM extract (the compose
-  Valhalla does this on first start), and point `EXPO_PUBLIC_MAP_STYLE_URL` at your own style.
-- **Photon index:** the compose / k8s Photon downloads the Israel index on first start.
-- **CarPlay / Android Auto:** needs Apple's CarPlay navigation entitlement and Google's car-app review;
-  the guidance engine is platform-free, so these are new UI shells over the same `NavigationSession`.
-- **Store listings, privacy policy** (background location justification for both stores).
+- **Apple / Google approvals:** CarPlay navigation entitlement (request from Apple for your team),
+  Android Auto car-app review, background-location review (the video and justification are scripted
+  in `docs/store/background-location.md`).
+- **Fill the placeholders:** legal entity and contact in the privacy policy (`legal.content.ts`),
+  store listing copy, production API / tile hosts in `eas.json`.
+- **Run the map-data build** on a machine with Docker (or the workflow), then set `MAP_TILES_URL`.

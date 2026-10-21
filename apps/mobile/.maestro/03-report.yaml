@@ -1,0 +1,18 @@
+# Report a hazard from the home screen; the report sheet closes and a confirmation shows.
+appId: com.wayline.app.dev
+name: Report a hazard
+tags: [smoke, reports]
+---
+- runFlow: subflows/launch.yaml
+- tapOn:
+    id: report-open
+- assertVisible:
+    id: report-police
+- tapOn:
+    id: report-hazard
+- extendedWaitUntil:
+    notVisible:
+      id: report-police
+    timeout: 10000
+- assertVisible:
+    id: where-to

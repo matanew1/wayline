@@ -124,11 +124,12 @@ export default function AccountScreen() {
               textContentType="telephoneNumber"
               autoComplete="tel"
               accessibilityLabel={t('phoneLabel')}
+              testID="phone-input"
               style={[styles.input, { textAlign: I18nManager.isRTL ? 'right' : 'left' }]}
             />
             <Text style={styles.hint}>{t('phoneHint')}</Text>
             {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
-            {busy ? <ActivityIndicator color={colors.primary} /> : <PrimaryButton title={t('sendCode')} disabled={!phone.trim()} onPress={() => void send()} />}
+            {busy ? <ActivityIndicator color={colors.primary} /> : <PrimaryButton title={t('sendCode')} disabled={!phone.trim()} onPress={() => void send()} testID="send-code" />}
           </View>
         ) : (
           <View style={{ gap: 12 }}>
@@ -144,10 +145,11 @@ export default function AccountScreen() {
               autoComplete="sms-otp"
               autoFocus
               accessibilityLabel={t('codeLabel')}
+              testID="code-input"
               style={[styles.input, styles.code]}
             />
             {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
-            {busy ? <ActivityIndicator color={colors.primary} /> : <PrimaryButton title={t('verify')} disabled={code.length !== 6} onPress={() => void verify()} />}
+            {busy ? <ActivityIndicator color={colors.primary} /> : <PrimaryButton title={t('verify')} disabled={code.length !== 6} onPress={() => void verify()} testID="verify-code" />}
             <Pressable accessibilityRole="button" onPress={() => { setSentTo(null); setCode(''); }} style={{ padding: 12 }}>
               <Text style={styles.link}>{t('resend')}</Text>
             </Pressable>

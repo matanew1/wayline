@@ -77,6 +77,7 @@ export function SearchPanel() {
           placeholder={savingKind === 'home' ? t('searchHomePlaceholder') : savingKind === 'work' ? t('searchWorkPlaceholder') : t('searchPlaceholder')}
           placeholderTextColor={colors.muted}
           accessibilityLabel={t('searchLabel')}
+          testID="search-input"
           returnKeyType="search"
           autoCorrect={false}
           style={styles.input}
@@ -90,11 +91,12 @@ export function SearchPanel() {
         keyExtractor={(p) => p.id}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 20 }}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <ListRow
             icon="pin" title={item.name} subtitle={item.address}
             right={item.distanceM != null ? formatDistance(item.distanceM, lang) : undefined}
             onPress={() => pick(item)}
+            testID={`search-result-${index}`}
           />
         )}
       />

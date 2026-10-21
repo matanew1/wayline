@@ -1,0 +1,35 @@
+# Phone sign-in with the API's review credentials (REVIEW_PHONE / REVIEW_CODE — no SMS is sent).
+appId: com.wayline.app.dev
+name: Phone sign-in
+tags: [account]
+env:
+  PHONE: "+972500000001"
+  CODE: "246810"
+---
+- runFlow: subflows/launch.yaml
+- tapOn:
+    id: open-settings
+- tapOn:
+    id: open-account
+- tapOn:
+    id: phone-input
+- inputText: ${PHONE}
+- hideKeyboard
+- tapOn:
+    id: send-code
+- extendedWaitUntil:
+    visible:
+      id: code-input
+    timeout: 15000
+- tapOn:
+    id: code-input
+- inputText: ${CODE}
+- hideKeyboard
+- tapOn:
+    id: verify-code
+- extendedWaitUntil:
+    visible:
+      id: sign-out
+    timeout: 15000
+- assertVisible:
+    id: delete-account

@@ -1,0 +1,14 @@
+# Fresh app, location granted, GPS parked in central Tel Aviv.
+appId: com.wayline.app.dev
+---
+- launchApp:
+    clearState: true
+    permissions:
+      location: allow
+- setLocation:
+    latitude: 32.0853
+    longitude: 34.7818
+- extendedWaitUntil:
+    visible:
+      id: where-to
+    timeout: 20000

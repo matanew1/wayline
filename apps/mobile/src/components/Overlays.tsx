@@ -23,7 +23,7 @@ export function ReportSheet() {
         <Text style={styles.h2}>{t('whatDoYouSee')}</Text>
         <View style={styles.grid}>
           {TYPES.map((type) => (
-            <Pressable key={type} accessibilityRole="button" accessibilityLabel={t('reportType', { type: t(`type.${type}`) })} onPress={() => void report(type)} style={({ pressed }) => [styles.tile, pressed && { opacity: 0.7 }]}>
+            <Pressable key={type} accessibilityRole="button" accessibilityLabel={t('reportType', { type: t(`type.${type}`) })} testID={`report-${type}`} onPress={() => void report(type)} style={({ pressed }) => [styles.tile, pressed && { opacity: 0.7 }]}>
               <View style={[styles.tileIcon, { backgroundColor: reportColors[type] }]}>
                 <Icon name={type} color="#FFFFFF" size={26} />
               </View>
@@ -68,7 +68,7 @@ export function ArrivedPanel() {
       <Text style={styles.arrived}>{t('arrived')}</Text>
       <Text style={styles.sub}>{a.name} · {formatDistance(a.distanceM, lang)} · {formatClock(a.arrivedAt)}</Text>
       <View style={{ alignSelf: 'stretch' }}>
-        <PrimaryButton title={t('done')} onPress={closeArrival} />
+        <PrimaryButton title={t('done')} onPress={closeArrival} testID="arrived-done" />
       </View>
     </Sheet>
   );

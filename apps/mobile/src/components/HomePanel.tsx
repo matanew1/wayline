@@ -27,27 +27,27 @@ export function HomePanel({ onRecenter }: { onRecenter: () => void }) {
             <Text style={styles.bannerBody}>{t('locationOffBody')}</Text>
           </Pressable>
         ) : <View style={{ flex: 1 }} />}
-        <RoundButton icon="settings" label={t('settings')} onPress={() => router.push('/settings')} />
+        <RoundButton icon="settings" testID="open-settings" label={t('settings')} onPress={() => router.push('/settings')} />
       </View>
 
       <View style={styles.fabs} pointerEvents="box-none">
         <RoundButton icon="recenter" label={t('recenter')} onPress={onRecenter} />
-        <RoundButton icon="alert" label={t('reportHazard')} size={60} bg={colors.report} fg="#FFFFFF" onPress={() => set({ reportSheetOpen: true })} />
+        <RoundButton icon="alert" testID="report-open" label={t('reportHazard')} size={60} bg={colors.report} fg="#FFFFFF" onPress={() => set({ reportSheetOpen: true })} />
       </View>
 
       <Sheet>
-        <Pressable accessibilityRole="search" accessibilityLabel={t('whereTo')} onPress={() => set({ screen: 'search' })} style={styles.search}>
+        <Pressable accessibilityRole="search" testID="where-to" accessibilityLabel={t('whereTo')} onPress={() => set({ screen: 'search' })} style={styles.search}>
           <Icon name="search" />
           <Text style={styles.searchText}>{t('whereTo')}</Text>
         </Pressable>
         <View>
           <ListRow
-            icon="home" iconBg={colors.primarySoft} iconFg={colors.primaryDark} title={t('home')}
+            icon="home" iconBg={colors.primarySoft} iconFg={colors.primaryDark} title={t('home')} testID="home-row"
             subtitle={home ? home.address : t('setHome')}
             onPress={() => (home ? planTo(home) : set({ screen: 'search', savingKind: 'home' }))}
           />
           <ListRow
-            icon="work" iconBg={colors.primarySoft} iconFg={colors.primaryDark} title={t('work')}
+            icon="work" iconBg={colors.primarySoft} iconFg={colors.primaryDark} title={t('work')} testID="work-row"
             subtitle={work ? work.address : t('setWork')}
             onPress={() => (work ? planTo(work) : set({ screen: 'search', savingKind: 'work' }))}
           />

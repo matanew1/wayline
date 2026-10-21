@@ -33,7 +33,7 @@ export function NavPanel() {
   return (
     <>
       {/* Maneuver banner */}
-      <View style={[styles.banner, { top: insets.top + 8 }]} accessibilityLiveRegion="polite">
+      <View style={[styles.banner, { top: insets.top + 8 }]} accessibilityLiveRegion="polite" testID="nav-banner">
         <View style={styles.turn}>
           <Icon name={rerouting ? 'recenter' : maneuverIcon(next?.kind)} color="#FFFFFF" size={36} strokeWidth={2.4} />
         </View>
@@ -113,7 +113,7 @@ export function NavPanel() {
 
       {/* Bottom bar */}
       <View style={[styles.bar, { paddingBottom: Math.max(18, insets.bottom + 6) }]}>
-        <RoundButton icon="close" label={t('endDrive')} bg={colors.surfaceAlt} raised={false} onPress={() => void endDrive()} />
+        <RoundButton icon="close" testID="end-drive" label={t('endDrive')} bg={colors.surfaceAlt} raised={false} onPress={() => void endDrive()} />
         <View style={{ flex: 1, alignItems: 'center' }}>
           <Text style={styles.eta}>{formatDuration(remainingS, lang)}</Text>
           <Text style={styles.etaSub}>

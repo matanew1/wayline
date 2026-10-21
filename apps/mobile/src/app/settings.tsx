@@ -61,7 +61,7 @@ export default function SettingsScreen() {
       </View>
 
       <Section title={t('account')}>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/account')} style={styles.row}>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/account')} style={styles.row} testID="open-account">
           <Icon name="user" color={colors.primaryDark} />
           <Text style={[styles.rowText, { flex: 1 }]}>
             {user && !user.guest && s.phone ? t('signedInAs', { phone: s.phone }) : t('guestAccount')}
@@ -77,6 +77,7 @@ export default function SettingsScreen() {
             accessibilityRole="radio"
             accessibilityState={{ selected: s.language === l.value }}
             onPress={() => void chooseLanguage(l.value)}
+            testID={`language-${l.value}`}
             style={styles.row}
           >
             <Text style={[styles.rowText, { flex: 1 }]}>{t(l.key)}</Text>

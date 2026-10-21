@@ -54,6 +54,7 @@ export function PreviewPanel() {
               accessibilityRole="radio"
               accessibilityState={{ selected: sel }}
               onPress={() => set({ selectedRouteId: r.id })}
+              testID={`route-${i}`}
               style={[styles.card, sel && styles.cardSel]}
             >
               <View style={{ minWidth: 84 }}>
@@ -74,10 +75,10 @@ export function PreviewPanel() {
         {isDevBuild ? (
           <View style={styles.simRow}>
             <Text style={styles.sub}>{t('simulateDrive')}</Text>
-            <Switch value={simulate} onValueChange={(v) => setSetting('simulate', v)} accessibilityLabel={t('simulateDrive')} />
+            <Switch value={simulate} onValueChange={(v) => setSetting('simulate', v)} accessibilityLabel={t('simulateDrive')} testID="simulate-switch" />
           </View>
         ) : null}
-        <PrimaryButton title={simulate && isDevBuild ? t('goSimulated') : t('goNow')} disabled={!selected || planning} onPress={() => void startDrive()} />
+        <PrimaryButton title={simulate && isDevBuild ? t('goSimulated') : t('goNow')} disabled={!selected || planning} onPress={() => void startDrive()} testID="go" />
       </Sheet>
     </>
   );

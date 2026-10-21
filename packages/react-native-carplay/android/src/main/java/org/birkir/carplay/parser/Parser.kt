@@ -239,11 +239,11 @@ class Parser(
         return null
       }
       if (cue.type == ReadableType.String) {
-        return SpannableString(cue.asString())
+        return SpannableString(cue.asString() ?: "")
       }
       if (cue.type == ReadableType.Map) {
-        val cueMap = cue.asMap()
-        val text = cueMap.getString("text")
+        val cueMap = cue.asMap() ?: return null
+        val text = cueMap.getString("text") ?: ""
         val image = parseCarIcon(cueMap.getMap("image")!!, context)
         val alignment = cueMap.getInt("alignment")
         val start = cueMap.getInt("start")

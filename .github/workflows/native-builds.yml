@@ -47,8 +47,11 @@ jobs:
           set -o pipefail
           ./gradlew assembleDebug --no-daemon -PreactNativeArchitectures=x86_64 2>&1 | tee gradle.log || {
             # Kotlin/Java compiler errors and Gradle's "What went wrong" block, as annotations
-            grep -E "^e: |error:|Could not|Unresolved reference|> " gradle.log | grep -v "^> Task" | head -15 \
-              | while read -r l; do echo "::error title=gradle::${l:0:900}"; done
+            errs=$(grep -E "^e: |error:|Unresolved reference" gradle.log | sed 's|file:///home/runner/work/wayline/wayline/||' | sort -u)
+            n=$(printf '%s\n' "$errs" | grep -c . || true)
+            # one annotation with all compiler errors (GitHub caps error annotations per step at 10)
+            echo "::error title=gradle ($n errors)::$(printf '%s' "$errs" | head -c 60000 | awk 'BEGIN{ORS="%0A"}{gsub(/%/,"%25");print}')"
+            echo "::error title=gradle: what went wrong::$(grep -A8 "What went wrong" gradle.log | head -12 | awk 'BEGIN{ORS="%0A"}{gsub(/%/,"%25");print}')"
             exit 1
           }
       - name: Car service and metadata are in the merged manifest
@@ -110,7 +113,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO build \
             | tee xcodebuild.log | grep -E "error:|warning: .*CarSceneDelegate|\*\* BUILD" || true
           grep -q "\*\* BUILD SUCCEEDED \*\*" xcodebuild.log || {
-            grep -m 10 "error:" xcodebuild.log | while read -r l; do echo "::error title=xcodebuild::${l:0:900}"; done
+            errs=$(grep "error:" xcodebuild.log | sed 's|/Users/runner/work/wayline/wayline/||' | sort -u)
+            echo "::error title=xcodebuild ($(printf '%s\n' "$errs" | grep -c .) errors)::$(printf '%s' "$errs" | head -c 60000 | awk 'BEGIN{ORS="%0A"}{gsub(/%/,"%25");print}')"
             exit 1
           }
           echo "::notice title=iOS car=${WAYLINE_CAR}::simulator build succeeded"

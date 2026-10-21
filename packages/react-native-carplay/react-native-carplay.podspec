@@ -15,6 +15,8 @@ Pod::Spec.new do |s|
   s.source       = { :git => repo_url }
   s.source_files = "ios/*.{h,m,mm,swift}"
   s.frameworks   = 'CarPlay'
+  # mixed Swift/ObjC pod: ObjC imports the generated <module>-Swift.h
+  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'SWIFT_COMPILATION_MODE' => 'wholemodule' }
 
   # React Native 0.88 (New Architecture): pulls in React-Core and friends the way RN expects;
   # this is a legacy-interop module (RCTBridgeModule / RCTEventEmitter), no codegen.

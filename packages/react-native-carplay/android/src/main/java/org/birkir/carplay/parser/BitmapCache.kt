@@ -51,7 +51,8 @@ object BitmapCache {
         val dataSource = Fresco.getImagePipeline().fetchDecodedImage(imageRequest, context)
         val result =
             DataSources.waitForFinalResult(dataSource) as CloseableReference<CloseableBitmap>
-        val bitmap = result.get().underlyingBitmap.copy(Bitmap.Config.ARGB_8888, false)
+        val bitmap = result.get().underlyingBitmap?.copy(Bitmap.Config.ARGB_8888, false)
+            ?: run { CloseableReference.closeSafely(result); dataSource.close(); throw IllegalStateException("could not decode image $uri") }
 
         CloseableReference.closeSafely(result)
         dataSource.close()

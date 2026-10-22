@@ -136,6 +136,26 @@ describe('NavigationSession — live ETA, faster routes, speed limits', () => {
     expect(session.snapshot.reroutes).toBe(1);
   });
 
+  it('takes an unanswered faster route after 8 s, unless the driver declines', async () => {
+    const faster = makeRoute(undefined, undefined, ['Fast St', 'Quick Rd', 'Swift Ave', ''], 20, 'rt_fast');
+    const ctx = setup({ checkEta: async () => ({ remainingS: 400, fasterRoute: faster, savingS: 240 }) });
+    const sim = new RouteSimulator(route.polyline6, { speedMs: 6 });
+    ctx.tick(); await ctx.session.onFix(sim.step(ctx.now())); await flush();
+    const offeredAt = ctx.session.snapshot.offer!.offeredAt;
+    expect(offeredAt).toBe(ctx.now());
+    for (let i = 0; i < 7; i++) { ctx.tick(); await ctx.session.onFix(sim.step(ctx.now())); }
+    expect(ctx.session.snapshot.route.id).toBe('rt_test'); // 7 s: still asking
+    ctx.tick(); await ctx.session.onFix(sim.step(ctx.now()));
+    expect(ctx.session.snapshot.route.id).toBe('rt_fast'); // 8 s: switched
+    expect(ctx.session.snapshot.offer).toBeNull();
+
+    const other = setup({ checkEta: async () => ({ remainingS: 400, fasterRoute: faster, savingS: 240 }) });
+    other.tick(); await other.session.onFix(sim.step(other.now())); await flush();
+    other.session.declineOffer();
+    for (let i = 0; i < 10; i++) { other.tick(); await other.session.onFix(sim.step(other.now())); }
+    expect(other.session.snapshot.route.id).toBe('rt_test');
+  });
+
   it('does not re-offer a declined route during the cooldown', async () => {
     const faster = makeRoute(undefined, undefined, undefined, 20, 'rt_fast');
     const ctx = setup({ checkEta: async () => ({ remainingS: 300, fasterRoute: faster, savingS: 200 }) });

@@ -31,11 +31,14 @@ export interface AppConfig {
   jsonLogs: boolean;
   /** Optional fixed sign-in for App Store / Play review: this number accepts this code, no SMS sent. */
   review: { phone: string; code: string } | null;
+  /** Public base URL of this API (for share links). Unset → taken from the request. */
+  publicUrl: string | null;
   map: {
-    /** TileJSON URL of our vector tiles (Martin), e.g. https://tiles.example.com/israel. Unset → fallback style. */
+    /** TileJSON URL of our vector tiles (Martin), e.g. https://tiles.example.com/israel. Unset → fallbackTilesUrl. */
     tilesUrl: string | null;
     glyphsUrl: string;
-    fallbackStyleUrl: string;
+    /** Public OpenMapTiles-schema tiles used until our own are deployed (OpenFreeMap, no key). */
+    fallbackTilesUrl: string;
     /** Where style.template.json lives. */
     styleDir: string;
   };
@@ -89,10 +92,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     metricsEnabled: env.METRICS_ENABLED ? env.METRICS_ENABLED === 'true' : true,
     jsonLogs: env.LOG_FORMAT ? env.LOG_FORMAT === 'json' : prod,
     review: env.REVIEW_PHONE && env.REVIEW_CODE ? { phone: env.REVIEW_PHONE, code: env.REVIEW_CODE } : null,
+    publicUrl: env.PUBLIC_URL ? env.PUBLIC_URL.replace(/\/$/, '') : null,
     map: {
       tilesUrl: env.MAP_TILES_URL || null,
       glyphsUrl: env.MAP_GLYPHS_URL ?? 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
-      fallbackStyleUrl: env.MAP_FALLBACK_STYLE_URL ?? 'https://tiles.openfreemap.org/styles/liberty',
+      fallbackTilesUrl: env.MAP_FALLBACK_TILES_URL ?? 'https://tiles.openfreemap.org/planet',
       styleDir: env.MAP_STYLE_DIR ?? require('node:path').resolve(__dirname, '../../../../infra/map-data'),
     },
   };

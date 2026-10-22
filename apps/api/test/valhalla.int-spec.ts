@@ -46,6 +46,14 @@ d('ValhallaEngine against real Valhalla', () => {
     expect(edges.map((e) => e.speedLimitKmh)).toEqual(expect.arrayContaining([50]));
   });
 
+  it('routes motorcycles and reads lanes via trace_route (OSRM format)', async () => {
+    const [moto] = await engine.route({ ...q, avoid: [], vehicle: 'motorcycle' });
+    expect(moto.distanceM).toBeGreaterThan(0);
+    expect((await engine.edges(moto.polyline6, 'motorcycle')).length).toBeGreaterThan(3);
+    // the synthetic grid has no turn:lanes tags: the call must succeed and return nothing
+    expect(await engine.lanes(moto.polyline6, 'motorcycle')).toEqual([]);
+  });
+
   it('returns [] when no route exists', async () => {
     expect(await engine.route({ ...q, avoid: [], destination: { lat: 40.7, lng: -74 } })).toEqual([]);
   });

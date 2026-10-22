@@ -13,6 +13,34 @@ export class StartTripDto {
   @IsString()
   @Length(4, 64)
   routeId: string;
+
+  @ApiPropertyOptional({ description: 'Destination as the driver picked it — shown in recent drives and on ETA share links', maxLength: 120 })
+  @IsOptional()
+  @IsString()
+  @Length(1, 120)
+  destinationName?: string;
+}
+
+export class ShareTripDto {
+  @ApiPropertyOptional({ description: 'Current remaining seconds from the app, to seed the page until the next ETA check' })
+  @IsOptional() @IsInt() @Min(0) @Max(86_400)
+  remainingS?: number;
+}
+
+export class TripShareDto {
+  @ApiProperty() token: string;
+  @ApiProperty({ description: 'Public page with the live ETA' }) url: string;
+  @ApiProperty() expiresAt: string;
+}
+
+export const SHARE_STATUSES = ['driving', 'arrived', 'ended'] as const;
+
+export class SharedTripDto {
+  @ApiProperty() driverName: string;
+  @ApiProperty({ nullable: true }) destinationName: string | null;
+  @ApiProperty({ enum: SHARE_STATUSES }) status: (typeof SHARE_STATUSES)[number];
+  @ApiProperty({ description: 'Expected arrival, epoch ms' }) etaEpochMs: number;
+  @ApiProperty() updatedAt: string;
 }
 
 export class UpdateTripDto {

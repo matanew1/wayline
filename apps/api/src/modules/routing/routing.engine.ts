@@ -1,13 +1,21 @@
 import { BadGatewayException, Logger } from '@nestjs/common';
 import { bearingDeg, decodePolyline, encodePolyline, haversineM, headingDiff, LatLng } from '../../common/geo';
 import type { RouteEdge } from './traffic.pricing';
-import type { AvoidOption, ManeuverDto, ManeuverKind, RouteFlag } from './routing.dto';
+import type { AvoidOption, LaneDto, LaneIndication, ManeuverDto, ManeuverKind, RouteFlag, Vehicle } from './routing.dto';
+import { LANE_INDICATIONS } from './routing.dto';
 
 export interface RouteQuery {
   origin: LatLng;
   destination: LatLng;
   avoid: AvoidOption[];
   language: 'he' | 'en';
+  vehicle?: Vehicle;
+}
+
+/** Lanes painted before an intersection on the route. */
+export interface LaneHint {
+  at: LatLng;
+  lanes: LaneDto[];
 }
 
 /** Engine output before the API adds ids and subscription cells. */
@@ -23,7 +31,50 @@ export interface RoutingEngine {
   /** Best route first, up to 3. Empty array = no route exists. */
   route(q: RouteQuery): Promise<EngineRoute[]>;
   /** The road edges along a route shape (for live traffic pricing and speed limits). */
-  edges(polyline6: string): Promise<RouteEdge[]>;
+  edges(polyline6: string, vehicle?: Vehicle): Promise<RouteEdge[]>;
+  /** Turn lanes at intersections along a route shape (empty when the map has none). */
+  lanes(polyline6: string, vehicle?: Vehicle): Promise<LaneHint[]>;
+}
+
+export const costingFor = (v: Vehicle | undefined) => (v === 'motorcycle' ? 'motorcycle' : 'auto');
+
+/** Lanes from Valhalla's OSRM-format trace_route output: one hint per intersection that has lane data. */
+export function mapOsrmLanes(json: any): LaneHint[] {
+  const out: LaneHint[] = [];
+  const known = new Set<string>(LANE_INDICATIONS);
+  for (const m of json.matchings ?? []) {
+    for (const leg of m.legs ?? []) {
+      for (const step of leg.steps ?? []) {
+        for (const i of step.intersections ?? []) {
+          if (!Array.isArray(i.lanes) || i.lanes.length < 2) continue;
+          out.push({
+            at: { lat: i.location[1], lng: i.location[0] },
+            lanes: i.lanes.map((l: any) => ({
+              indications: (l.indications ?? ['none']).filter((x: string) => known.has(x)) as LaneIndication[],
+              valid: !!l.valid,
+            })),
+          });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** Attaches each lane hint to the maneuver that starts at that intersection (within 30 m). */
+export function attachLanes(maneuvers: ManeuverDto[], shape: LatLng[], hints: LaneHint[]): ManeuverDto[] {
+  if (!hints.length) return maneuvers;
+  return maneuvers.map((m) => {
+    const p = shape[Math.min(m.beginShapeIndex, shape.length - 1)];
+    if (!p || m.kind === 'depart' || m.kind === 'arrive') return m;
+    let best: LaneHint | null = null, bestD = 30;
+    for (const h of hints) {
+      const d = haversineM(p, h.at);
+      if (d <= bestD) { best = h; bestD = d; }
+    }
+    // a hint where every lane is valid tells the driver nothing
+    return best && best.lanes.some((l) => !l.valid) ? { ...m, lanes: best.lanes } : m;
+  });
 }
 
 export function mapTraceEdges(json: any): RouteEdge[] {
@@ -89,9 +140,9 @@ export class ValhallaEngine implements RoutingEngine {
         { lat: q.origin.lat, lon: q.origin.lng, type: 'break' },
         { lat: q.destination.lat, lon: q.destination.lng, type: 'break' },
       ],
-      costing: 'auto',
+      costing: costingFor(q.vehicle),
       costing_options: {
-        auto: {
+        [costingFor(q.vehicle)]: {
           use_tolls: q.avoid.includes('tolls') ? 0 : 0.5,
           use_highways: q.avoid.includes('highways') ? 0 : 1,
           use_ferry: q.avoid.includes('ferries') ? 0 : 0.5,
@@ -126,7 +177,19 @@ export class ValhallaEngine implements RoutingEngine {
     return trips.slice(0, 3).map(mapValhallaTrip);
   }
 
-  async edges(polyline6: string): Promise<RouteEdge[]> {
+  async lanes(polyline6: string, vehicle?: Vehicle): Promise<LaneHint[]> {
+    const res = await fetch(`${this.baseUrl}/trace_route`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // native directions carry no lane data; the OSRM serializer does (verified against Valhalla 3.9)
+      body: JSON.stringify({ encoded_polyline: polyline6, shape_match: 'edge_walk', costing: costingFor(vehicle), format: 'osrm', directions_options: { units: 'kilometers' } }),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    if (!res.ok) throw new Error(`trace_route HTTP ${res.status}`);
+    return mapOsrmLanes(await res.json());
+  }
+
+  async edges(polyline6: string, vehicle?: Vehicle): Promise<RouteEdge[]> {
     const res = await fetch(`${this.baseUrl}/trace_attributes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -134,7 +197,7 @@ export class ValhallaEngine implements RoutingEngine {
         encoded_polyline: polyline6,
         // the shape came from Valhalla itself, so walk its edges exactly rather than map-matching
         shape_match: 'edge_walk',
-        costing: 'auto',
+        costing: costingFor(vehicle),
         filters: {
           attributes: ['edge.id', 'edge.way_id', 'edge.length', 'edge.speed', 'edge.speed_limit', 'edge.begin_shape_index', 'edge.end_shape_index'],
           action: 'include',
@@ -172,6 +235,21 @@ export class MockRoutingEngine implements RoutingEngine {
       beginShapeIndex: i,
       endShapeIndex: i + 1,
     }));
+  }
+
+  /** Mock map: every turn has three lanes (left, straight, right); the matching one is valid. */
+  async lanes(polyline6: string): Promise<LaneHint[]> {
+    const pts = decodePolyline(polyline6);
+    const out: LaneHint[] = [];
+    for (let i = 1; i < pts.length - 1; i++) {
+      const k = turnKind(bearingDeg(pts[i - 1], pts[i]), bearingDeg(pts[i], pts[i + 1]));
+      out.push({ at: pts[i], lanes: [
+        { indications: ['left'], valid: k === 'left' },
+        { indications: ['straight'], valid: k === 'continue' },
+        { indications: ['right'], valid: k === 'right' },
+      ] });
+    }
+    return out;
   }
 
   async route(q: RouteQuery): Promise<EngineRoute[]> {

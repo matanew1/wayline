@@ -23,6 +23,6 @@ import { ReportsService } from './reports.service';
       useFactory: (pg: Pool | null) => (pg ? new PgReportLog(pg) : new MemoryReportLog()),
     },
   ],
-  exports: [ReportEvents, ReportsService],
+  exports: [ReportEvents, ReportsService, REPORT_LOG],
 })
 export class ReportsModule {}

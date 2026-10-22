@@ -56,3 +56,46 @@ export class RedisTrafficStore implements TrafficStore {
     await this.redis.hset(TRAFFIC_HASH, id, JSON.stringify(s));
   }
 }
+
+/** Hour of week as the traffic worker writes it: UTC, Monday 00:00 = 0 … Sunday 23:00 = 167. */
+export function hourOfWeek(epochMs: number): number {
+  const d = new Date(epochMs);
+  return ((d.getUTCDay() + 6) % 7) * 24 + d.getUTCHours();
+}
+
+/** Below this many samples an hourly baseline is too noisy to plan with. */
+export const HISTORIC_MIN_SAMPLES = 3;
+
+/** Usual speed per OSM way and hour of week (edge_speeds_hourly), for "best time to leave". */
+export interface HistoricSpeedStore {
+  /** km/h by way id, for the ways that have a baseline at that hour. */
+  getHourly(wayIds: number[], hourOfWeek: number): Promise<Map<number, number>>;
+}
+
+export class MemoryHistoricSpeedStore implements HistoricSpeedStore {
+  private readonly speeds = new Map<string, number>();
+  set(wayId: number, how: number, kmh: number) { this.speeds.set(`${wayId}:${how}`, kmh); }
+  async getHourly(wayIds: number[], how: number) {
+    const out = new Map<number, number>();
+    for (const w of wayIds) {
+      const v = this.speeds.get(`${w}:${how}`);
+      if (v) out.set(w, v);
+    }
+    return out;
+  }
+}
+
+export class PgHistoricSpeedStore implements HistoricSpeedStore {
+  constructor(private readonly pg: import('pg').Pool) {}
+  async getHourly(wayIds: number[], how: number) {
+    const out = new Map<number, number>();
+    const ids = [...new Set(wayIds)];
+    if (!ids.length) return out;
+    const { rows } = await this.pg.query<{ edge_id: string; p50_kmh: number }>(
+      `SELECT edge_id, p50_kmh FROM edge_speeds_hourly WHERE edge_id = ANY($1::bigint[]) AND hour_of_week = $2 AND samples >= $3`,
+      [ids, how, HISTORIC_MIN_SAMPLES],
+    );
+    for (const r of rows) if (r.p50_kmh > 0) out.set(Number(r.edge_id), Number(r.p50_kmh));
+    return out;
+  }
+}

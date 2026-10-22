@@ -13,6 +13,7 @@ export function configureApp(app: INestApplication): OpenAPIObject {
     { path: 'privacy', method: RequestMethod.GET },
     { path: 'delete-account', method: RequestMethod.GET },
     { path: 'map/style.json', method: RequestMethod.GET },
+    { path: 's/:token', method: RequestMethod.GET },
   ] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
   app.enableCors({ origin: config.corsOrigins });

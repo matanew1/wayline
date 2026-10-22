@@ -14,6 +14,13 @@ export type Trip = S['TripDto'];
 export type ProbeFix = S['ProbeFixDto'];
 export type Report = S['ReportDto'];
 export type ReportType = Report['type'];
+export type Me = S['MeDto'];
+export type RecentTrip = S['RecentTripDto'];
+export type Lane = S['LaneDto'];
+export type Departure = S['DepartureDto'];
+export type TripShare = S['TripShareDto'];
+export type SharedTrip = S['SharedTripDto'];
+export type Vehicle = NonNullable<S['RouteRequestDto']['vehicle']>;
 
 /** Socket.IO namespace `/rt` — connect with `io(baseUrl + '/rt', { auth: { token } })`. */
 export interface RealtimeClientEvents {

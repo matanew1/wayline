@@ -111,6 +111,38 @@ describe('API on Postgres + Redis', () => {
     expect(rows[0].ended_at).not.toBeNull();
   });
 
+  it('profile, recent drives, report stats, departures and ETA sharing on Postgres + Redis', async () => {
+    const { body: g } = await request(http).post('/v1/auth/guest').expect(200);
+    const h = auth(g.accessToken);
+    await request(http).patch('/v1/me').set(h).send({ nickname: 'Night Owl' }).expect(200);
+    expect((await db.query('SELECT display_name FROM users WHERE id = $1', [g.userId])).rows[0].display_name).toBe('Night Owl');
+
+    const routes = await request(http).post('/v1/routes').set(h).send({ origin: { lat: 32.08, lng: 34.78 }, destination: { lat: 32.1, lng: 34.81 } }).expect(200);
+    const trip = await request(http).post('/v1/trips').set(h).send({ routeId: routes.body[0].id, destinationName: 'City Hall' }).expect(201);
+    const share = (await request(http).post(`/v1/trips/${trip.body.tripId}/share`).set(h).send({ remainingS: 300 }).expect(201)).body;
+    expect((await request(http).get(`/v1/share/${share.token}`).expect(200)).body).toMatchObject({ driverName: 'Night Owl', destinationName: 'City Hall', status: 'driving' });
+    await request(http).patch(`/v1/trips/${trip.body.tripId}`).set(h).send({ status: 'finished' }).expect(200);
+    expect((await request(http).get(`/v1/share/${share.token}`).expect(200)).body.status).toBe('arrived');
+
+    const rep = await request(http).post('/v1/reports').set(h).send({ type: 'hazard', lat: 32.45, lng: 34.95, clientId: 'int-profile-01' }).expect(201);
+    const { body: other } = await request(http).post('/v1/auth/guest').expect(200);
+    await request(http).post(`/v1/reports/${rep.body.id}/votes`).set(auth(other.accessToken)).send({ stillThere: true }).expect(200);
+    await waitFor(async () => ((await db.query('SELECT 1 FROM report_votes WHERE report_id = $1', [rep.body.id])).rowCount ? true : undefined));
+
+    const me = (await request(http).get('/v1/me').set(h).expect(200)).body;
+    expect(me).toMatchObject({ nickname: 'Night Owl', stats: { drives: 1, distanceM: routes.body[0].distanceM, reports: 1, confirmations: 1 } });
+    const recent = (await request(http).get('/v1/me/trips').set(h).expect(200)).body;
+    expect(recent).toEqual([expect.objectContaining({ destinationName: 'City Hall' })]);
+
+    // historic baselines come from edge_speeds_hourly (mock routes have no OSM ways → typical)
+    await db.query('INSERT INTO edge_speeds_hourly (edge_id, hour_of_week, p50_kmh, samples) VALUES (42, 10, 31.5, 9), (43, 10, 20, 1)');
+    const { HISTORIC_STORE } = await import('../src/modules/routing/routing.tokens');
+    const usual = await app.get(HISTORIC_STORE).getHourly([42, 43, 44], 10);
+    expect([...usual]).toEqual([[42, 31.5]]); // too few samples on 43
+    const deps = (await request(http).get(`/v1/routes/${routes.body[1].id}/departures`).set(h).expect(200)).body;
+    expect(deps.map((d: any) => d.basis)).toEqual(['typical', 'typical', 'typical']);
+  });
+
   it('account deletion removes personal data and anonymises reports', async () => {
     const { body: g } = await request(http).post('/v1/auth/guest').expect(200);
     const h = auth(g.accessToken);

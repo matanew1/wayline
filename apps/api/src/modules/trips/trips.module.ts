@@ -4,15 +4,18 @@ import type { AppConfig } from '../../config/config';
 import { CONFIG, PG, PROBE_SINK, TRIPS_REPO } from '../../common/tokens';
 import { RoutingModule } from '../routing/routing.module';
 import { KafkaProbeSink, MemoryProbeSink, type ProbeSink } from './probe-sink';
+import { ShareController } from './share.controller';
+import { ShareService } from './share.service';
 import { TripsController } from './trips.controller';
 import { MemoryTripsRepository, PgTripsRepository } from './trips.repository';
 import { TripsService } from './trips.service';
 
 @Module({
   imports: [RoutingModule],
-  controllers: [TripsController],
+  controllers: [TripsController, ShareController],
   providers: [
     TripsService,
+    ShareService,
     {
       provide: TRIPS_REPO,
       inject: [PG],

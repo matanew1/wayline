@@ -33,6 +33,8 @@ export interface EtaCheck {
 export interface RouteOffer {
   route: NavRoute;
   savingS: number;
+  /** When it was offered (deps.now()); it is taken automatically after autoAcceptMs. */
+  offeredAt: number;
 }
 
 export interface SessionOptions {
@@ -41,6 +43,8 @@ export interface SessionOptions {
   etaCheckEveryMs: number;
   /** A declined route isn't offered again for this long. */
   declineCooldownMs: number;
+  /** An offer nobody answers is accepted after this long (0 = never). Glancing at the screen is enough. */
+  autoAcceptMs: number;
   tracker: Partial<TrackerOptions>;
 }
 
@@ -87,7 +91,7 @@ export class NavigationSession<R extends ReportLike = ReportLike> {
   private declinedAt = -Infinity;
 
   constructor(route: NavRoute, private readonly destination: LatLng, private readonly deps: SessionDeps<R>, opts: Partial<SessionOptions> = {}) {
-    this.o = { minRerouteIntervalMs: 10_000, etaCheckEveryMs: 60_000, declineCooldownMs: 5 * 60_000, tracker: {}, ...opts };
+    this.o = { minRerouteIntervalMs: 10_000, etaCheckEveryMs: 60_000, declineCooldownMs: 5 * 60_000, autoAcceptMs: 8_000, tracker: {}, ...opts };
     this.lang = deps.language ?? 'en';
     this.tracker = new RouteTracker(route, this.o.tracker);
     this.voice = new VoicePlanner(route.maneuvers, this.lang);
@@ -147,6 +151,12 @@ export class NavigationSession<R extends ReportLike = ReportLike> {
     const progress = this.tracker.update(fix);
     const now = this.deps.now();
 
+    const offer = this.snap.offer;
+    if (offer && this.o.autoAcceptMs > 0 && now - offer.offeredAt >= this.o.autoAcceptMs && !progress.arrived) {
+      this.switchTo(offer.route, fix);
+      return this.snap;
+    }
+
     if (progress.arrived) {
       const text = this.voice.update(progress, speedMs);
       if (text) this.deps.speak(text, 'guidance');
@@ -193,7 +203,7 @@ export class NavigationSession<R extends ReportLike = ReportLike> {
         if (res.fasterRoute && res.savingS && !declinedRecently && !this.snap.offer) {
           const text = this.deps.offerText?.(res.savingS);
           if (text) this.deps.speak(text, 'status');
-          this.emit({ offer: { route: res.fasterRoute, savingS: res.savingS } });
+          this.emit({ offer: { route: res.fasterRoute, savingS: res.savingS, offeredAt: this.deps.now() } });
         }
       })
       .catch(() => undefined)

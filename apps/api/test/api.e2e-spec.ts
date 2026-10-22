@@ -309,8 +309,9 @@ describe('Wayline API (in-memory drivers)', () => {
     expect(en.text).toContain('class="warn"');
   });
 
-  it('serves the map style: fallback redirect, or our tiles with localised labels', async () => {
-    await request(http).get('/map/style.json').expect(302).expect('location', 'https://tiles.openfreemap.org/styles/liberty');
+  it('serves the map style: fallback tiles, or our tiles with localised labels', async () => {
+    const fallback = await request(http).get('/map/style.json').expect(200);
+    expect(fallback.body.sources.openmaptiles.url).toBe('https://tiles.openfreemap.org/planet');
     const { CONFIG } = await import('../src/common/tokens');
     const cfg = app.get(CONFIG);
     cfg.map = { ...cfg.map, tilesUrl: 'https://tiles.example.com/israel' };

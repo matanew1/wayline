@@ -9,3 +9,4 @@ export { ProbeBuffer, type SendResult, type ProbeBufferOptions } from './probe-b
 export { RouteSimulator, type SimulatorOptions } from './simulator';
 export { NavigationSession, type SessionDeps, type SessionSnapshot, type SessionPhase, type SessionOptions, type EtaCheck, type RouteOffer } from './session';
 export { carGuidance, carIcon, carPlayManeuverType, androidAutoManeuverType, type CarGuidance, type CarManeuver, type CarIcon } from './car';
+export { routeReasons, type RouteReason, type ReasonRoute } from './route-reasons';

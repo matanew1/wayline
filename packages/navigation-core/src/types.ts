@@ -21,6 +21,13 @@ export interface RouteManeuver {
   distanceM: number;
   durationS: number;
   beginShapeIndex: number;
+  /** Lanes before this maneuver, left to right; `valid` lanes can be used for it. */
+  lanes?: Lane[];
+}
+
+export interface Lane {
+  indications: string[];
+  valid: boolean;
 }
 
 export interface SpeedLimitSpan {

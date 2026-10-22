@@ -11,6 +11,7 @@ import { decodePolyline, nearestSegment, type LatLng } from '../../common/geo';
 import { edgeAtShapeIndex } from '../routing/traffic.pricing';
 import type { EtaDto, ProbeBatchDto, ProbesAcceptedDto, TripDto, TripStartedDto, UpdateTripDto } from './trips.dto';
 import type { Trip, TripsRepository } from './trips.repository';
+import { ShareService } from './share.service';
 
 export const PROBE_TOKEN_TTL_S = 12 * 3600;
 /** Suggest a new route only when it saves at least this much. */
@@ -37,6 +38,7 @@ export class TripsService {
     @Inject(PROBE_SINK) private readonly sink: ProbeSink,
     @Inject(CLOCK) private readonly clock: Clock,
     private readonly routing: RoutingService,
+    private readonly shares: ShareService,
     private readonly metrics: Metrics,
   ) {}
 
@@ -46,10 +48,11 @@ export class TripsService {
     return r;
   }
 
-  async start(userId: string, routeId: string): Promise<TripStartedDto> {
+  async start(userId: string, routeId: string, destinationName?: string): Promise<TripStartedDto> {
     const route = await this.routeOr404(routeId);
     const trip = await this.trips.create({
       userId, routeId, origin: route.origin, destination: route.destination, distanceM: route.distanceM,
+      destinationName: destinationName?.trim() || null,
     });
     const probeToken = randomBytes(24).toString('base64url');
     await this.kv.set(`probe:${probeToken}`, JSON.stringify({ sessionId: randomUUID() }), PROBE_TOKEN_TTL_S);
@@ -73,6 +76,7 @@ export class TripsService {
       changes.endedAt = new Date(this.clock.now());
       const token = await this.kv.get(`trip:probe:${tripId}`);
       if (token) await Promise.all([this.kv.del(`probe:${token}`), this.kv.del(`trip:probe:${tripId}`)]);
+      await this.shares.end(tripId, patch.status === 'finished');
     }
     return toDto(await this.trips.update(tripId, changes));
   }
@@ -93,9 +97,11 @@ export class TripsService {
     // without edges, fall back to the router's estimate scaled by the share of the shape left
     const remainingS = priced?.durationS ?? Math.round(route.durationS * (1 - near.index / Math.max(1, shape.length - 1)));
     const out: EtaDto = { remainingS, offRouteM: Math.round(near.offsetM), liveEdges: priced?.liveEdges ?? 0 };
+    await this.shares.updateEta(tripId, remainingS);
 
     if (remainingS >= MIN_REMAINING_FOR_ALTERNATIVES_S) {
-      const [best] = await this.routing.plan({ origin: { lat: pos.lat, lng: pos.lng }, destination: route.destination }).catch(() => []);
+      // same preferences the driver planned with (avoid tolls, motorcycle, language)
+      const [best] = await this.routing.plan({ origin: { lat: pos.lat, lng: pos.lng }, destination: route.destination, ...route.options }).catch(() => []);
       if (best && remainingS - best.durationS >= FASTER_ROUTE_MIN_SAVING_S) {
         out.fasterRoute = best;
         out.savingS = remainingS - best.durationS;

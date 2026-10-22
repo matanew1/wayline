@@ -164,6 +164,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/routes/{id}/departures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["RoutingController_departures"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/trips": {
         parameters: {
             query?: never;
@@ -212,6 +228,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/trips/{id}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["TripsController_share"];
+        delete: operations["TripsController_unshare"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/probes": {
         parameters: {
             query?: never;
@@ -222,6 +254,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["TripsController_probes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/share/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ShareController_json"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -287,6 +335,22 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["AccountController_remove"];
+        options?: never;
+        head?: never;
+        patch: operations["AccountController_update"];
+        trace?: never;
+    };
+    "/v1/me/trips": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AccountController_recentTrips"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -383,6 +447,17 @@ export interface components {
              * @enum {string}
              */
             language: "he" | "en";
+            /**
+             * @default car
+             * @enum {string}
+             */
+            vehicle: "car" | "motorcycle";
+        };
+        LaneDto: {
+            /** @description Arrows painted on this lane, left to right order of lanes */
+            indications: ("left" | "slight left" | "sharp left" | "straight" | "right" | "slight right" | "sharp right" | "uturn" | "none")[];
+            /** @description This lane can be used for the maneuver */
+            valid: boolean;
         };
         ManeuverDto: {
             /** @enum {string} */
@@ -395,6 +470,8 @@ export interface components {
             durationS: number;
             /** @description Index into the decoded polyline where this maneuver starts */
             beginShapeIndex: number;
+            /** @description Lanes before this maneuver, left to right, when the map has turn lanes */
+            lanes?: components["schemas"]["LaneDto"][];
         };
         SpeedLimitSpanDto: {
             /** @description metres along the route */
@@ -432,9 +509,23 @@ export interface components {
             /** @description null when edge data was unavailable */
             traffic: components["schemas"]["RouteTrafficDto"] | null;
         };
+        DepartureDto: {
+            /** @description Minutes from now */
+            offsetMin: number;
+            departAt: string;
+            /** @description Expected drive time if leaving then */
+            durationS: number;
+            /**
+             * @description live = current traffic; historic = usual speeds for that hour of the week; typical = no traffic data, router estimate
+             * @enum {string}
+             */
+            basis: "live" | "historic" | "typical";
+        };
         StartTripDto: {
             /** @description Route id from POST /routes */
             routeId: string;
+            /** @description Destination as the driver picked it — shown in recent drives and on ETA share links */
+            destinationName?: string;
         };
         TripStartedDto: {
             tripId: string;
@@ -473,6 +564,16 @@ export interface components {
             fasterRoute?: components["schemas"]["RouteOptionDto"];
             savingS?: number;
         };
+        ShareTripDto: {
+            /** @description Current remaining seconds from the app, to seed the page until the next ETA check */
+            remainingS?: number;
+        };
+        TripShareDto: {
+            token: string;
+            /** @description Public page with the live ETA */
+            url: string;
+            expiresAt: string;
+        };
         ProbeFixDto: {
             /** @description Unix epoch milliseconds */
             t: number;
@@ -494,6 +595,15 @@ export interface components {
             accepted: number;
             /** @description Fixes dropped for poor accuracy or bad timestamps */
             dropped: number;
+        };
+        SharedTripDto: {
+            driverName: string;
+            destinationName: Record<string, never> | null;
+            /** @enum {string} */
+            status: "driving" | "arrived" | "ended";
+            /** @description Expected arrival, epoch ms */
+            etaEpochMs: number;
+            updatedAt: string;
         };
         CreateReportDto: {
             /** @enum {string} */
@@ -533,12 +643,49 @@ export interface components {
             confidence: number;
             expiresAt: string;
         };
+        ReputationDto: {
+            /** @enum {string} */
+            level: "new" | "helper" | "trusted" | "legend";
+            /** @description 0–1 progress to the next level */
+            progress: number;
+            /** @enum {string|null} */
+            next: "new" | "helper" | "trusted" | "legend" | null;
+        };
+        StatsDto: {
+            /** @description Finished drives */
+            drives: number;
+            distanceM: number;
+            /** @description Reports you made */
+            reports: number;
+            /** @description "Still there" votes other drivers gave your reports */
+            confirmations: number;
+        };
         MeDto: {
             id: string;
             guest: boolean;
+            /** @description Shown on your profile; a default is generated until you pick one */
+            nickname: string;
+            /** @description True when nickname is the generated default */
+            nicknameIsDefault: boolean;
             /** @description 0–1; seeds the confidence of your reports */
             trustScore: number;
+            reputation: components["schemas"]["ReputationDto"];
+            stats: components["schemas"]["StatsDto"];
             createdAt: string;
+        };
+        UpdateMeDto: {
+            /**
+             * @description 2–24 letters, digits, spaces, . _ -; empty string resets to the default
+             * @example Night Owl
+             */
+            nickname?: string;
+        };
+        RecentTripDto: {
+            id: string;
+            destinationName: Record<string, never> | null;
+            distanceM: number;
+            startedAt: string;
+            endedAt?: string;
         };
     };
     responses: never;
@@ -790,6 +937,38 @@ export interface operations {
             };
         };
     };
+    RoutingController_departures: {
+        parameters: {
+            query?: {
+                /** @description Minutes from now, comma-separated (0–180, up to 6) */
+                offsets?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Drive time for this route when leaving now or later */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DepartureDto"][];
+                };
+            };
+            /** @description Route expired */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     TripsController_start: {
         parameters: {
             query?: never;
@@ -863,6 +1042,51 @@ export interface operations {
             };
         };
     };
+    TripsController_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareTripDto"];
+            };
+        };
+        responses: {
+            /** @description A link that shows your live arrival time (not your location). Same link if already shared. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TripShareDto"];
+                };
+            };
+        };
+    };
+    TripsController_unshare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     TripsController_probes: {
         parameters: {
             query?: never;
@@ -883,6 +1107,34 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProbesAcceptedDto"];
                 };
+            };
+        };
+    };
+    ShareController_json: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedTripDto"];
+                };
+            };
+            /** @description Unknown or expired link */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -991,6 +1243,50 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    AccountController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMeDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeDto"];
+                };
+            };
+        };
+    };
+    AccountController_recentTrips: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecentTripDto"][];
+                };
             };
         };
     };

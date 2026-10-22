@@ -13,6 +13,13 @@ export const MANEUVER_KINDS = [
 ] as const;
 export type ManeuverKind = (typeof MANEUVER_KINDS)[number];
 
+export const VEHICLES = ['car', 'motorcycle'] as const;
+export type Vehicle = (typeof VEHICLES)[number];
+
+/** Lane arrows, as painted on the road (OSM turn:lanes). */
+export const LANE_INDICATIONS = ['left', 'slight left', 'sharp left', 'straight', 'right', 'slight right', 'sharp right', 'uturn', 'none'] as const;
+export type LaneIndication = (typeof LANE_INDICATIONS)[number];
+
 export const ROUTE_FLAGS = ['toll', 'highway', 'ferry'] as const;
 export type RouteFlag = (typeof ROUTE_FLAGS)[number];
 
@@ -38,6 +45,17 @@ export class RouteRequestDto {
   @IsOptional()
   @IsIn(['he', 'en'])
   language?: 'he' | 'en';
+
+  @ApiPropertyOptional({ enum: VEHICLES, default: 'car' })
+  @IsOptional()
+  @IsIn(VEHICLES)
+  vehicle?: Vehicle;
+}
+
+export class LaneDto {
+  @ApiProperty({ enum: LANE_INDICATIONS, isArray: true, description: 'Arrows painted on this lane, left to right order of lanes' })
+  indications: LaneIndication[];
+  @ApiProperty({ description: 'This lane can be used for the maneuver' }) valid: boolean;
 }
 
 export class ManeuverDto {
@@ -47,6 +65,8 @@ export class ManeuverDto {
   @ApiProperty({ description: 'Length of this maneuver segment' }) distanceM: number;
   @ApiProperty() durationS: number;
   @ApiProperty({ description: 'Index into the decoded polyline where this maneuver starts' }) beginShapeIndex: number;
+  @ApiPropertyOptional({ type: [LaneDto], description: 'Lanes before this maneuver, left to right, when the map has turn lanes' })
+  lanes?: LaneDto[];
 }
 
 export class SpeedLimitSpanDto {
@@ -78,4 +98,21 @@ export class RouteOptionDto {
   @ApiProperty({ type: [String], description: 'Geohash-6 cells to subscribe to on the realtime gateway' }) cells: string[];
   @ApiProperty({ type: [SpeedLimitSpanDto], description: 'Posted limits along the route (gaps = unknown)' }) speedLimits: SpeedLimitSpanDto[];
   @ApiProperty({ type: RouteTrafficDto, nullable: true, description: 'null when edge data was unavailable' }) traffic: RouteTrafficDto | null;
+}
+
+export class DeparturesQueryDto {
+  @ApiPropertyOptional({ description: 'Minutes from now, comma-separated (0–180, up to 6)', example: '0,15,30' })
+  @IsOptional()
+  offsets?: string;
+}
+
+export class DepartureDto {
+  @ApiProperty({ description: 'Minutes from now' }) offsetMin: number;
+  @ApiProperty() departAt: string;
+  @ApiProperty({ description: 'Expected drive time if leaving then' }) durationS: number;
+  @ApiProperty({
+    enum: ['live', 'historic', 'typical'],
+    description: 'live = current traffic; historic = usual speeds for that hour of the week; typical = no traffic data, router estimate',
+  })
+  basis: 'live' | 'historic' | 'typical';
 }

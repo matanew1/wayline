@@ -22,8 +22,16 @@ export interface VoteRecord {
  * `record` upserts the report row and (optionally) inserts a vote atomically, so a vote
  * can never land before its report — even when another API replica created the report.
  */
+export interface ReporterStats {
+  /** Reports this user created. */
+  reports: number;
+  /** "Still there" votes other drivers gave this user's reports. */
+  confirmations: number;
+}
+
 export interface ReportLog {
   record(r: Report, status: 'active' | 'expired', vote?: VoteRecord): Promise<void>;
+  statsFor(userId: string): Promise<ReporterStats>;
 }
 
 export class MemoryReportStore implements ActiveReportStore {
@@ -95,13 +103,33 @@ export class RedisReportStore implements ActiveReportStore {
 
 export class MemoryReportLog implements ReportLog {
   readonly events: { id: string; status: string; vote?: VoteRecord }[] = [];
+  private readonly reporters = new Map<string, string | null>();
   async record(r: Report, status: 'active' | 'expired', vote?: VoteRecord) {
     this.events.push({ id: r.id, status, vote });
+    this.reporters.set(r.id, r.reporterId);
+  }
+  async statsFor(userId: string) {
+    const mine = new Set([...this.reporters].filter(([, u]) => u === userId).map(([id]) => id));
+    const voted = new Set<string>();
+    for (const e of this.events) {
+      if (e.vote?.stillThere && mine.has(e.id) && e.vote.userId !== userId) voted.add(`${e.id}:${e.vote.userId}`);
+    }
+    return { reports: mine.size, confirmations: voted.size };
   }
 }
 
 export class PgReportLog implements ReportLog {
   constructor(private readonly pg: Pool) {}
+
+  async statsFor(userId: string) {
+    const { rows } = await this.pg.query<{ reports: string; confirmations: string }>(
+      `SELECT (SELECT count(*) FROM reports WHERE reporter_id = $1) AS reports,
+              (SELECT count(*) FROM report_votes v JOIN reports r ON r.id = v.report_id
+                WHERE r.reporter_id = $1 AND v.user_id <> $1 AND v.still_there) AS confirmations`,
+      [userId],
+    );
+    return { reports: Number(rows[0].reports), confirmations: Number(rows[0].confirmations) };
+  }
 
   async record(r: Report, status: 'active' | 'expired', vote?: VoteRecord) {
     const client = await this.pg.connect();

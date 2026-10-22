@@ -213,6 +213,37 @@ paths:
         - bearer: []
       tags:
         - routes
+  /v1/routes/{id}/departures:
+    get:
+      operationId: RoutingController_departures
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: offsets
+          required: false
+          in: query
+          description: Minutes from now, comma-separated (0–180, up to 6)
+          schema:
+            example: 0,15,30
+            type: string
+      responses:
+        '200':
+          description: Drive time for this route when leaving now or later
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DepartureDto'
+        '404':
+          description: Route expired
+      security:
+        - bearer: []
+      tags:
+        - routes
   /v1/trips:
     post:
       operationId: TripsController_start
@@ -286,6 +317,47 @@ paths:
         - bearer: []
       tags:
         - trips
+  /v1/trips/{id}/share:
+    post:
+      operationId: TripsController_share
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShareTripDto'
+      responses:
+        '201':
+          description: A link that shows your live arrival time (not your location). Same link if already shared.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripShareDto'
+      security:
+        - bearer: []
+      tags:
+        - trips
+    delete:
+      operationId: TripsController_unshare
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '204':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - trips
   /v1/probes:
     post:
       operationId: TripsController_probes
@@ -303,6 +375,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProbesAcceptedDto'
+      tags:
+        - trips
+  /v1/share/{token}:
+    get:
+      operationId: ShareController_json
+      parameters:
+        - name: token
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SharedTripDto'
+        '404':
+          description: Unknown or expired link
       tags:
         - trips
   /v1/reports:
@@ -401,12 +493,56 @@ paths:
         - bearer: []
       tags:
         - account
+    patch:
+      operationId: AccountController_update
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMeDto'
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeDto'
+      security:
+        - bearer: []
+      tags:
+        - account
     delete:
       operationId: AccountController_remove
       parameters: []
       responses:
         '204':
           description: ''
+      security:
+        - bearer: []
+      tags:
+        - account
+  /v1/me/trips:
+    get:
+      operationId: AccountController_recentTrips
+      parameters:
+        - name: limit
+          required: false
+          in: query
+          schema:
+            maximum: 50
+            default: 10
+            type: number
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecentTripDto'
       security:
         - bearer: []
       tags:
@@ -613,9 +749,39 @@ components:
             - en
           default: en
           description: Language of maneuver instructions
+        vehicle:
+          type: string
+          enum:
+            - car
+            - motorcycle
+          default: car
       required:
         - origin
         - destination
+    LaneDto:
+      type: object
+      properties:
+        indications:
+          type: array
+          description: Arrows painted on this lane, left to right order of lanes
+          items:
+            type: string
+            enum:
+              - left
+              - slight left
+              - sharp left
+              - straight
+              - right
+              - slight right
+              - sharp right
+              - uturn
+              - none
+        valid:
+          type: boolean
+          description: This lane can be used for the maneuver
+      required:
+        - indications
+        - valid
     ManeuverDto:
       type: object
       properties:
@@ -654,6 +820,11 @@ components:
         beginShapeIndex:
           type: number
           description: Index into the decoded polyline where this maneuver starts
+        lanes:
+          description: Lanes before this maneuver, left to right, when the map has turn lanes
+          type: array
+          items:
+            $ref: '#/components/schemas/LaneDto'
       required:
         - kind
         - instruction
@@ -761,12 +932,41 @@ components:
         - cells
         - speedLimits
         - traffic
+    DepartureDto:
+      type: object
+      properties:
+        offsetMin:
+          type: number
+          description: Minutes from now
+        departAt:
+          type: string
+        durationS:
+          type: number
+          description: Expected drive time if leaving then
+        basis:
+          type: string
+          enum:
+            - live
+            - historic
+            - typical
+          description: >-
+            live = current traffic; historic = usual speeds for that hour of the week; typical = no traffic data, router
+            estimate
+      required:
+        - offsetMin
+        - departAt
+        - durationS
+        - basis
     StartTripDto:
       type: object
       properties:
         routeId:
           type: string
           description: Route id from POST /routes
+        destinationName:
+          type: string
+          description: Destination as the driver picked it — shown in recent drives and on ETA share links
+          maxLength: 120
       required:
         - routeId
     TripStartedDto:
@@ -854,6 +1054,26 @@ components:
         - remainingS
         - offRouteM
         - liveEdges
+    ShareTripDto:
+      type: object
+      properties:
+        remainingS:
+          type: number
+          description: Current remaining seconds from the app, to seed the page until the next ETA check
+    TripShareDto:
+      type: object
+      properties:
+        token:
+          type: string
+        url:
+          type: string
+          description: Public page with the live ETA
+        expiresAt:
+          type: string
+      required:
+        - token
+        - url
+        - expiresAt
     ProbeFixDto:
       type: object
       properties:
@@ -901,6 +1121,31 @@ components:
       required:
         - accepted
         - dropped
+    SharedTripDto:
+      type: object
+      properties:
+        driverName:
+          type: string
+        destinationName:
+          type: object
+          nullable: true
+        status:
+          type: string
+          enum:
+            - driving
+            - arrived
+            - ended
+        etaEpochMs:
+          type: number
+          description: Expected arrival, epoch ms
+        updatedAt:
+          type: string
+      required:
+        - driverName
+        - destinationName
+        - status
+        - etaEpochMs
+        - updatedAt
     CreateReportDto:
       type: object
       properties:
@@ -1005,6 +1250,50 @@ components:
         - status
         - confidence
         - expiresAt
+    ReputationDto:
+      type: object
+      properties:
+        level:
+          type: string
+          enum:
+            - new
+            - helper
+            - trusted
+            - legend
+        progress:
+          type: number
+          description: 0–1 progress to the next level
+        next:
+          type: string
+          enum:
+            - new
+            - helper
+            - trusted
+            - legend
+          nullable: true
+      required:
+        - level
+        - progress
+        - next
+    StatsDto:
+      type: object
+      properties:
+        drives:
+          type: number
+          description: Finished drives
+        distanceM:
+          type: number
+        reports:
+          type: number
+          description: Reports you made
+        confirmations:
+          type: number
+          description: '"Still there" votes other drivers gave your reports'
+      required:
+        - drives
+        - distanceM
+        - reports
+        - confirmations
     MeDto:
       type: object
       properties:
@@ -1012,13 +1301,53 @@ components:
           type: string
         guest:
           type: boolean
+        nickname:
+          type: string
+          description: Shown on your profile; a default is generated until you pick one
+        nicknameIsDefault:
+          type: boolean
+          description: True when nickname is the generated default
         trustScore:
           type: number
           description: 0–1; seeds the confidence of your reports
+        reputation:
+          $ref: '#/components/schemas/ReputationDto'
+        stats:
+          $ref: '#/components/schemas/StatsDto'
         createdAt:
           type: string
       required:
         - id
         - guest
+        - nickname
+        - nicknameIsDefault
         - trustScore
+        - reputation
+        - stats
         - createdAt
+    UpdateMeDto:
+      type: object
+      properties:
+        nickname:
+          type: string
+          description: 2–24 letters, digits, spaces, . _ -; empty string resets to the default
+          example: Night Owl
+    RecentTripDto:
+      type: object
+      properties:
+        id:
+          type: string
+        destinationName:
+          type: object
+          nullable: true
+        distanceM:
+          type: number
+        startedAt:
+          type: string
+        endedAt:
+          type: string
+      required:
+        - id
+        - destinationName
+        - distanceM
+        - startedAt

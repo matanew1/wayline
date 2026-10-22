@@ -4,6 +4,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { AddressInfo } from 'node:net';
 import { resolve } from 'node:path';
+import Redis from 'ioredis';
 import { io } from 'socket.io-client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
@@ -37,6 +38,11 @@ describe('realtime across replicas', () => {
   beforeAll(async () => {
     // own schema setup: don't depend on another suite running first (Jest orders files by size/history)
     await migrate(DATABASE_URL, resolve(__dirname, '../../../infra/sql'), () => undefined);
+    // and a clean Redis db: rate-limit counters are shared through Redis, so earlier suites'
+    // guest sign-ups would otherwise count against this one within the same minute
+    const redis = new Redis(REDIS_URL);
+    await redis.flushdb();
+    redis.disconnect();
     a = await replica();
     b = await replica();
   });

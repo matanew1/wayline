@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { AddressInfo } from 'node:net';
+import { resolve } from 'node:path';
 import { io } from 'socket.io-client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
@@ -11,6 +12,7 @@ import { geohashEncode } from '../src/common/geo';
 import { PROBE_SINK } from '../src/common/tokens';
 import { RedisIoAdapter } from '../src/modules/realtime/redis-io.adapter';
 import { MemoryProbeSink } from '../src/modules/trips/probe-sink';
+import { migrate } from '../src/scripts/migrate';
 import { auth } from './helpers';
 
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://wayline:wayline@127.0.0.1:5432/wayline_test';
@@ -33,6 +35,8 @@ describe('realtime across replicas', () => {
   let b: Awaited<ReturnType<typeof replica>>;
 
   beforeAll(async () => {
+    // own schema setup: don't depend on another suite running first (Jest orders files by size/history)
+    await migrate(DATABASE_URL, resolve(__dirname, '../../../infra/sql'), () => undefined);
     a = await replica();
     b = await replica();
   });

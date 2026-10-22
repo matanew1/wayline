@@ -9,15 +9,17 @@ import { useT } from '@/i18n';
 import { addRecent } from '@/state/settings';
 import { planTo } from '@/nav/drive';
 import { get, set, toast, useApp } from '@/state/store';
-import { colors } from '@/theme';
+import { fonts, useTheme } from '@/theme';
 import { Icon } from './Icon';
-import { ListRow } from './ui';
+import { type } from './ui';
 
 const DEBOUNCE_MS = 250;
 
 export function SearchPanel() {
   const insets = useSafeAreaInsets();
   const { t, lang } = useT();
+  const c = useTheme();
+  const T = type(c);
   const savingKind = useApp((s) => s.savingKind);
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Place[]>([]);
@@ -53,8 +55,10 @@ export function SearchPanel() {
     addRecent(p);
     if (savingKind) {
       try {
-        const sp = await savePlace({ kind: savingKind, name: t(savingKind), address: p.address, lat: p.lat, lng: p.lng });
-        set((s) => ({ saved: [...s.saved.filter((x) => x.kind !== savingKind), sp], savingKind: null, screen: 'home' }));
+        const name = savingKind === 'fav' ? p.name : t(savingKind);
+        const sp = await savePlace({ kind: savingKind, name, address: p.address, lat: p.lat, lng: p.lng });
+        // Home and Work are one each; favourites add up
+        set((s) => ({ saved: [...s.saved.filter((x) => savingKind === 'fav' || x.kind !== savingKind), sp], savingKind: null, screen: 'home' }));
         toast(t('saved', { name: sp.name }));
       } catch (e) {
         toast(e instanceof Error ? e.message : t('couldNotSave'));
@@ -64,40 +68,57 @@ export function SearchPanel() {
     void planTo(p);
   }
 
+  const placeholder = savingKind === 'home' ? t('searchHomePlaceholder') : savingKind === 'work' ? t('searchWorkPlaceholder') : t('searchPlaceholder');
+
   return (
-    <View style={[StyleSheet.absoluteFill, styles.wrap, { paddingTop: insets.top }]}>
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: c.page, paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel={t('back')} onPress={close} style={styles.back} hitSlop={8}>
-          <Icon name="back" size={24} />
+        <Pressable
+          accessibilityRole="button" accessibilityLabel={t('back')} onPress={close} hitSlop={8}
+          style={[styles.back, { backgroundColor: c.surface, borderColor: c.line }]}
+        >
+          <Icon name="back" size={22} color={c.ink} strokeWidth={2.6} />
         </Pressable>
         <TextInput
           autoFocus
           value={q}
           onChangeText={setQ}
-          placeholder={savingKind === 'home' ? t('searchHomePlaceholder') : savingKind === 'work' ? t('searchWorkPlaceholder') : t('searchPlaceholder')}
-          placeholderTextColor={colors.muted}
+          placeholder={placeholder}
+          placeholderTextColor={c.muted}
           accessibilityLabel={t('searchLabel')}
           testID="search-input"
           returnKeyType="search"
           autoCorrect={false}
-          style={styles.input}
+          selectionColor={c.primary}
+          style={[styles.input, { backgroundColor: c.surface, borderColor: c.primary, color: c.ink, textAlign: I18nManager.isRTL ? 'right' : 'left' }]}
         />
       </View>
-      {active && loading ? <ActivityIndicator style={{ marginTop: 16 }} color={colors.primary} /> : null}
-      {active && error ? <Text style={styles.empty}>{error}</Text> : null}
-      {active && !loading && !error && results.length === 0 ? <Text style={styles.empty}>{t('noResults')}</Text> : null}
+      {active && loading ? <ActivityIndicator style={{ marginTop: 16 }} color={c.primary} /> : null}
+      {active && error ? <Text style={[T.body, styles.empty, { color: c.sub }]}>{error}</Text> : null}
+      {active && !loading && !error && results.length === 0 ? (
+        <View style={styles.emptyBox}>
+          <Text style={[T.h2, { textAlign: 'center' }]}>{t('noResults')}</Text>
+        </View>
+      ) : null}
       <FlatList
         data={shown}
         keyExtractor={(p) => p.id}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 20 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 20, gap: 10 }}
         renderItem={({ item, index }) => (
-          <ListRow
-            icon="pin" title={item.name} subtitle={item.address}
-            right={item.distanceM != null ? formatDistance(item.distanceM, lang) : undefined}
-            onPress={() => pick(item)}
+          <Pressable
+            accessibilityRole="button"
             testID={`search-result-${index}`}
-          />
+            onPress={() => void pick(item)}
+            style={({ pressed }) => [styles.result, { backgroundColor: c.surface, borderColor: c.line }, pressed && { opacity: 0.8 }]}
+          >
+            <View style={[styles.resultIcon, { backgroundColor: c.surface2 }]}><Icon name="pin" color={c.primary} size={20} strokeWidth={2.4} /></View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={T.strong} numberOfLines={1}>{item.name}</Text>
+              {item.address ? <Text style={T.sub} numberOfLines={1}>{item.address}</Text> : null}
+            </View>
+            {item.distanceM != null ? <Text style={T.sub}>{formatDistance(item.distanceM, lang)}</Text> : null}
+          </Pressable>
         )}
       />
     </View>
@@ -105,9 +126,11 @@ export function SearchPanel() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { backgroundColor: colors.surface },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.line },
-  back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  input: { flex: 1, textAlign: I18nManager.isRTL ? 'right' : 'left', height: 48, borderRadius: 12, borderWidth: 2, borderColor: colors.primary, paddingHorizontal: 14, fontSize: 16, color: colors.ink },
-  empty: { textAlign: 'center', color: colors.muted, fontSize: 15, marginTop: 32 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 14 },
+  back: { width: 48, height: 48, borderRadius: 16, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  input: { flex: 1, minWidth: 0, height: 52, borderRadius: 18, borderWidth: 2, paddingHorizontal: 16, fontSize: 16, fontFamily: fonts.semibold },
+  empty: { textAlign: 'center', marginTop: 32, paddingHorizontal: 24 },
+  emptyBox: { paddingVertical: 40, paddingHorizontal: 24, alignItems: 'center', gap: 6 },
+  result: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 20, borderWidth: 1.5, minHeight: 64 },
+  resultIcon: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
 });

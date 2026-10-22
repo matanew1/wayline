@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Report, RouteOption, SavedPlace } from '@wayline/contracts';
+import type { Departure, Me, Report, RouteOption, SavedPlace } from '@wayline/contracts';
 import type { Fix, SessionSnapshot } from '@wayline/navigation-core';
 
 export type Screen = 'home' | 'search' | 'preview' | 'nav' | 'arrived';
@@ -32,10 +32,18 @@ export interface AppState {
   reportSheetOpen: boolean;
   toast: string | null;
   saved: SavedPlace[];
-  /** Set when search is used to pick a Home/Work address. */
-  savingKind: 'home' | 'work' | null;
+  /** Set when search is used to pick a Home/Work address or a favourite. */
+  savingKind: 'home' | 'work' | 'fav' | null;
   /** Background-location disclosure dialog is open. */
   disclosureOpen: boolean;
+  /** Drive times for leaving now / later on the selected route (null while loading or unavailable). */
+  departures: Departure[] | null;
+  /** Live-ETA link while it is being shared. */
+  sharingUrl: string | null;
+  /** Reports the driver posted on this drive (for the arrival screen). */
+  reportsThisDrive: number;
+  /** Profile (GET /v1/me), refreshed when the profile opens. */
+  me: Me | null;
 }
 
 export const useApp = create<AppState>(() => ({
@@ -54,6 +62,10 @@ export const useApp = create<AppState>(() => ({
   saved: [],
   savingKind: null,
   disclosureOpen: false,
+  departures: null,
+  sharingUrl: null,
+  reportsThisDrive: 0,
+  me: null,
 }));
 
 export const set = useApp.setState;

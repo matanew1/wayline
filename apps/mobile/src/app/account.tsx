@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, I18nManager, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { currentUser, getAccessToken, requestOtp, signOut, verifyOtp } from '@/api/auth';
@@ -10,9 +10,11 @@ import { useT } from '@/i18n';
 import { setSetting, useSettings } from '@/state/settings';
 import { set, toast } from '@/state/store';
 import { toE164 } from '@/lib/phone';
-import { colors } from '@/theme';
+import { fonts, useTheme, type Palette } from '@/theme';
 
 export default function AccountScreen() {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { t } = useT();
   const insets = useSafeAreaInsets();
   const savedPhone = useSettings((s) => s.phone);
@@ -92,11 +94,11 @@ export default function AccountScreen() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.surface }}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.page }}>
       <View style={[styles.wrap, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 }]}>
         <View style={styles.header}>
           <Pressable accessibilityRole="button" accessibilityLabel={t('back')} onPress={() => router.back()} style={styles.back} hitSlop={8}>
-            <Icon name="back" size={24} />
+            <Icon name="back" size={22} color={colors.ink} strokeWidth={2.6} />
           </Pressable>
           <Text style={styles.title}>{t('accountTitle')}</Text>
         </View>
@@ -160,18 +162,18 @@ export default function AccountScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) => StyleSheet.create({
   wrap: { flex: 1, paddingHorizontal: 20, gap: 20 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 4, marginStart: -12 },
-  back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 24, fontWeight: '800', color: colors.ink },
-  label: { fontSize: 14, fontWeight: '700', color: colors.sub, textAlign: 'left' },
-  body: { fontSize: 16, color: colors.ink, textAlign: 'left' },
-  hint: { fontSize: 13, color: colors.muted, textAlign: 'left' },
-  input: { height: 52, borderRadius: 12, borderWidth: 2, borderColor: colors.primary, paddingHorizontal: 14, fontSize: 18, color: colors.ink },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  back: { width: 48, height: 48, borderRadius: 16, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 26, fontFamily: fonts.heavy, letterSpacing: -0.4, color: colors.ink },
+  label: { fontSize: 14, fontFamily: fonts.bold, color: colors.sub, textAlign: 'left' },
+  body: { fontSize: 16, fontFamily: fonts.regular, color: colors.ink, textAlign: 'left' },
+  hint: { fontSize: 13, fontFamily: fonts.regular, color: colors.sub, textAlign: 'left' },
+  input: { height: 56, borderRadius: 18, borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.surface, paddingHorizontal: 16, fontSize: 18, fontFamily: fonts.semibold, color: colors.ink },
   code: { letterSpacing: 8, textAlign: 'center', fontVariant: ['tabular-nums'] },
-  error: { color: colors.danger, fontSize: 14, textAlign: 'left' },
+  error: { color: colors.dangerInk, fontSize: 14, fontFamily: fonts.semibold, textAlign: 'left' },
   danger: { marginTop: 24, padding: 14, alignItems: 'center' },
-  dangerText: { color: colors.danger, fontSize: 16, fontWeight: '700' },
-  link: { color: colors.primary, fontSize: 15, fontWeight: '700', textAlign: 'center' },
+  dangerText: { color: colors.dangerInk, fontSize: 16, fontFamily: fonts.bold },
+  link: { color: colors.primary, fontSize: 15, fontFamily: fonts.bold, textAlign: 'center' },
 });

@@ -1,43 +1,38 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import { Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import { config } from '@/config';
+import type { ReactNode } from 'react';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { currentUser } from '@/api/auth';
 import { Icon } from '@/components/Icon';
+import { Card, Chip, Segmented, SwitchRow, type } from '@/components/ui';
+import { config } from '@/config';
 import { applyLayoutDirection, useT, type StringKey } from '@/i18n';
-import { setSetting, useSettings, type AlertType, type LanguagePref } from '@/state/settings';
+import { setSetting, useSettings, type AlertType, type LanguagePref, type ThemePref, type Vehicle } from '@/state/settings';
 import { toast } from '@/state/store';
-import { colors } from '@/theme';
+import { elevation, useTheme } from '@/theme';
 
-const LANGS: { value: LanguagePref; key: StringKey }[] = [
-  { value: 'system', key: 'languageSystem' },
-  { value: 'he', key: 'hebrew' },
-  { value: 'en', key: 'english' },
-];
-const ALERTS: AlertType[] = ['police', 'camera', 'crash', 'hazard', 'closure', 'traffic'];
+const ALERTS: AlertType[] = ['police', 'crash', 'hazard', 'closure', 'camera', 'traffic'];
 
-function Section({ title, children, hint }: { title: string; children: React.ReactNode; hint?: string }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  const c = useTheme();
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.group}>{children}</View>
-      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
-    </View>
+    <Card style={{ gap: 12 }}>
+      <Text style={type(c).h2} accessibilityRole="header">{title}</Text>
+      {children}
+    </Card>
   );
 }
 
-function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowText}>{label}</Text>
-      <Switch value={value} onValueChange={onChange} accessibilityLabel={label} />
-    </View>
-  );
+function Label({ children }: { children: string }) {
+  const c = useTheme();
+  return <Text style={[type(c).sub, { fontSize: 14 }]}>{children}</Text>;
 }
 
 export default function SettingsScreen() {
   const { t, lang } = useT();
+  const c = useTheme();
+  const T = type(c);
   const insets = useSafeAreaInsets();
   const s = useSettings();
   const user = currentUser();
@@ -52,80 +47,98 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.surfaceSoft }} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 32 }}>
-      <View style={styles.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel={t('back')} onPress={() => router.back()} style={styles.back} hitSlop={8}>
-          <Icon name="back" size={24} />
-        </Pressable>
-        <Text style={styles.title}>{t('settingsTitle')}</Text>
-      </View>
-
-      <Section title={t('account')}>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/account')} style={styles.row} testID="open-account">
-          <Icon name="user" color={colors.primaryDark} />
-          <Text style={[styles.rowText, { flex: 1 }]}>
-            {user && !user.guest && s.phone ? t('signedInAs', { phone: s.phone }) : t('guestAccount')}
-          </Text>
-          <Icon name="chevron" color={colors.muted} size={18} />
-        </Pressable>
-      </Section>
-
-      <Section title={t('language')}>
-        {LANGS.map((l) => (
+    <View style={{ flex: 1, backgroundColor: c.page }}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 32 }]}>
+        <View style={styles.header}>
           <Pressable
-            key={l.value}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: s.language === l.value }}
-            onPress={() => void chooseLanguage(l.value)}
-            testID={`language-${l.value}`}
-            style={styles.row}
+            accessibilityRole="button" accessibilityLabel={t('back')} onPress={() => router.back()} hitSlop={8}
+            style={[styles.back, { backgroundColor: c.surface, borderColor: c.line }, elevation(c, 'sm')]}
           >
-            <Text style={[styles.rowText, { flex: 1 }]}>{t(l.key)}</Text>
-            {s.language === l.value ? <Icon name="check" color={colors.primary} /> : null}
+            <Icon name="back" size={22} color={c.ink} strokeWidth={2.6} />
           </Pressable>
-        ))}
-      </Section>
+          <Text style={[T.title, { fontSize: 26 }]} accessibilityRole="header">{t('settingsTitle')}</Text>
+        </View>
 
-      <Section title={t('routeOptions')}>
-        <ToggleRow label={t('voiceGuidance')} value={s.voice} onChange={(v) => setSetting('voice', v)} />
-        <ToggleRow label={t('avoidTolls')} value={s.avoidTolls} onChange={(v) => setSetting('avoidTolls', v)} />
-        <ToggleRow label={t('avoidHighways')} value={s.avoidHighways} onChange={(v) => setSetting('avoidHighways', v)} />
-      </Section>
+        <Card style={{ paddingVertical: 6 }}>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/account')} style={styles.row} testID="open-account">
+            <View style={[styles.rowIcon, { backgroundColor: c.surface2 }]}><Icon name="user" color={c.primary} size={20} /></View>
+            <Text style={[T.strong, { flex: 1 }]}>
+              {user && !user.guest && s.phone ? t('signedInAs', { phone: s.phone }) : t('guestAccount')}
+            </Text>
+            <Icon name="chevron" color={c.muted} size={18} />
+          </Pressable>
+        </Card>
 
-      <Section title={t('spokenAlerts')} hint={t('spokenAlertsHint')}>
-        {ALERTS.map((a) => (
-          <ToggleRow
-            key={a}
-            label={t(`type.${a}` as StringKey)}
-            value={s.spokenAlerts[a]}
-            onChange={(v) => setSetting('spokenAlerts', { ...s.spokenAlerts, [a]: v })}
+        <Section title={t('appearance')}>
+          <Label>{t('theme')}</Label>
+          <Segmented<ThemePref>
+            label={t('theme')}
+            testIDPrefix="theme"
+            value={s.theme}
+            onChange={(v) => setSetting('theme', v)}
+            options={[{ value: 'auto', label: t('themeAuto') }, { value: 'light', label: t('themeLight') }, { value: 'dark', label: t('themeDark') }]}
           />
-        ))}
-      </Section>
+          <Label>{t('language')}</Label>
+          <Segmented<LanguagePref>
+            label={t('language')}
+            testIDPrefix="language"
+            value={s.language}
+            onChange={(v) => void chooseLanguage(v)}
+            options={[{ value: 'system', label: t('languageSystem') }, { value: 'en', label: t('english') }, { value: 'he', label: t('hebrew') }]}
+          />
+        </Section>
 
-      <Section title={t('privacy')}>
-        <Text style={[styles.rowText, styles.para]}>{t('privacyBody')}</Text>
-        <Pressable accessibilityRole="link" onPress={() => Linking.openURL(`${config.apiUrl}/privacy?lang=${lang}`)} style={styles.row}>
-          <Text style={[styles.rowText, { flex: 1, color: colors.primary }]}>{t('privacyPolicy')}</Text>
-          <Icon name="chevron" color={colors.muted} size={18} />
-        </Pressable>
-      </Section>
+        <Section title={t('driving')}>
+          <Label>{t('vehicle')}</Label>
+          <Segmented<Vehicle>
+            label={t('vehicle')}
+            testIDPrefix="vehicle"
+            value={s.vehicle}
+            onChange={(v) => setSetting('vehicle', v)}
+            options={[{ value: 'car', label: t('car') }, { value: 'motorcycle', label: t('motorcycle') }]}
+          />
+          <SwitchRow label={t('avoidTolls')} hint={t('avoidTollsHint')} value={s.avoidTolls} onChange={(v) => setSetting('avoidTolls', v)} />
+          <SwitchRow label={t('avoidHighways')} hint={t('avoidHighwaysHint')} value={s.avoidHighways} onChange={(v) => setSetting('avoidHighways', v)} />
+        </Section>
 
-      <Text style={styles.version}>{t('version', { v: Constants.expoConfig?.version ?? '—' })}</Text>
-    </ScrollView>
+        <Section title={t('voiceAndAlerts')}>
+          <SwitchRow label={t('voiceGuidance')} hint={t('voiceHint')} value={s.voice} onChange={(v) => setSetting('voice', v)} />
+          <Label>{t('speakTheseAlerts')}</Label>
+          <View style={styles.chips}>
+            {ALERTS.map((a) => (
+              <Chip
+                key={a}
+                label={t(`type.${a}` as StringKey)}
+                on={s.spokenAlerts[a]}
+                testID={`alert-${a}`}
+                onPress={() => setSetting('spokenAlerts', { ...s.spokenAlerts, [a]: !s.spokenAlerts[a] })}
+              />
+            ))}
+          </View>
+        </Section>
+
+        <Section title={t('privacy')}>
+          <SwitchRow
+            label={t('helpLiveTraffic')} hint={t('helpLiveTrafficHint')} value={s.shareTraffic}
+            onChange={(v) => setSetting('shareTraffic', v)} testID="share-traffic"
+          />
+          <Pressable accessibilityRole="link" onPress={() => Linking.openURL(`${config.apiUrl}/privacy?lang=${lang}`)} style={styles.row}>
+            <Text style={[T.strong, { flex: 1 }]}>{t('privacyPolicy')}</Text>
+            <Icon name="chevron" color={c.muted} size={18} />
+          </Pressable>
+        </Section>
+
+        <Text style={[T.sub, { textAlign: 'center' }]}>{t('aboutLine', { v: Constants.expoConfig?.version ?? '—' })}</Text>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, marginBottom: 8 },
-  back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 24, fontWeight: '800', color: colors.ink },
-  section: { marginTop: 18, paddingHorizontal: 16, gap: 8 },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'left' },
-  group: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' },
-  row: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  rowText: { fontSize: 16, color: colors.ink, textAlign: 'left' },
-  para: { padding: 16, lineHeight: 22, color: colors.sub },
-  hint: { fontSize: 13, color: colors.muted, paddingHorizontal: 4, textAlign: 'left' },
-  version: { textAlign: 'center', color: colors.muted, fontSize: 13, marginTop: 24 },
+  content: { paddingHorizontal: 16, gap: 16, width: '100%', maxWidth: 640, alignSelf: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
+  back: { width: 48, height: 48, borderRadius: 16, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  row: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  rowIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });

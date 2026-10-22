@@ -31,12 +31,19 @@ const ICONS = {
   user: <><Circle cx="12" cy="8" r="4" /><Path d="M4 21a8 8 0 0 1 16 0" /></>,
   chevron: <Path d="M9 6l6 6-6 6" />,
   fast: <><Path d="M13 2L4 14h7l-1 8 9-12h-7z" /></>,
+  plus: <Path d="M12 5v14M5 12h14" />,
+  share: <><Circle cx="18" cy="5" r="2.5" /><Circle cx="6" cy="12" r="2.5" /><Circle cx="18" cy="19" r="2.5" /><Path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4" /></>,
+  arrowRight: <Path d="M5 12h14M13 6l6 6-6 6" />,
+  car: <><Path d="M5 17h14M6 17l1.5-6h9L18 17" /><Circle cx="8" cy="18.5" r="1.5" /><Circle cx="16" cy="18.5" r="1.5" /></>,
+  edit: <><Path d="M4 20h4L19 9l-4-4L4 16z" /><Path d="M13.5 6.5l4 4" /></>,
+  slightRight: <><Path d="M8 20v-6l7-7" /><Path d="M10 7h5v5" /></>,
+  slightLeft: <><Path d="M16 20v-6L9 7" /><Path d="M14 7H9v5" /></>,
 } as const;
 
 export type IconName = keyof typeof ICONS;
 
 /** Icons that point "forward/back" mirror in right-to-left layouts; turn arrows never do. */
-const DIRECTIONAL = new Set<IconName>(['back', 'chevron']);
+const DIRECTIONAL = new Set<IconName>(['back', 'chevron', 'arrowRight']);
 
 export function Icon({ name, size = 22, color = '#0F172A', strokeWidth = 2 }: { name: IconName; size?: number; color?: string; strokeWidth?: number }) {
   const flip = DIRECTIONAL.has(name) && I18nManager.isRTL;
@@ -57,4 +64,16 @@ export function maneuverIcon(kind: string | undefined): IconName {
     case 'arrive': return 'flag';
     default: return 'straight';
   }
+}
+
+/** Lane arrow for one lane's painted indications (the first meaningful one wins). */
+export function laneIcon(indications: string[]): IconName {
+  for (const i of indications) {
+    if (i === 'left' || i === 'sharp left') return 'left';
+    if (i === 'right' || i === 'sharp right') return 'right';
+    if (i === 'slight left') return 'slightLeft';
+    if (i === 'slight right') return 'slightRight';
+    if (i === 'uturn') return 'uturn';
+  }
+  return 'straight';
 }

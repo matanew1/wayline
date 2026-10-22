@@ -7,7 +7,7 @@ import { decodePolyline, RouteGeometry, type LatLng } from '@wayline/navigation-
 import { config } from '@/config';
 import { useApp } from '@/state/store';
 import { useT } from '@/i18n';
-import { colors, reportColors } from '@/theme';
+import { fonts, REPORT_INK, reportColors, useTheme } from '@/theme';
 
 export interface WaylineMapHandle {
   recenter(): void;
@@ -29,7 +29,9 @@ function boundsOf(points: LatLng[]): LngLatBounds {
  */
 export const WaylineMap = forwardRef<WaylineMapHandle>(function WaylineMap(_, ref) {
   const { t, lang } = useT();
-  const styleUrl = config.mapStyleUrl ?? `${config.apiUrl}/map/style.json?lang=${lang}`;
+  const c = useTheme();
+  // the API serves a light or dark basemap; an explicit style URL override is used as-is
+  const styleUrl = config.mapStyleUrl ?? `${config.apiUrl}/map/style.json?lang=${lang}&theme=${c.dark ? 'dark' : 'light'}`;
   const camera = useRef<CameraRef>(null);
   const screen = useApp((s) => s.screen);
   const position = useApp((s) => s.position);
@@ -125,13 +127,13 @@ export const WaylineMap = forwardRef<WaylineMapHandle>(function WaylineMap(_, re
           id="route-casing"
           type="line"
           layout={{ 'line-join': 'round', 'line-cap': 'round' }}
-          paint={{ 'line-color': '#FFFFFF', 'line-width': ['case', ['get', 'selected'], 13, 9] }}
+          paint={{ 'line-color': c.routeCasing, 'line-width': ['case', ['get', 'selected'], 14, 9] }}
         />
         <Layer
           id="route-line"
           type="line"
           layout={{ 'line-join': 'round', 'line-cap': 'round' }}
-          paint={{ 'line-color': ['case', ['get', 'selected'], colors.route, colors.routeAlt], 'line-width': ['case', ['get', 'selected'], 8, 6] }}
+          paint={{ 'line-color': ['case', ['get', 'selected'], c.route, c.routeAlt], 'line-width': ['case', ['get', 'selected'], 9, 6] }}
         />
       </GeoJSONSource>
 
@@ -140,14 +142,14 @@ export const WaylineMap = forwardRef<WaylineMapHandle>(function WaylineMap(_, re
           id="congestion-line"
           type="line"
           layout={{ 'line-join': 'round', 'line-cap': 'round' }}
-          paint={{ 'line-color': ['match', ['get', 'level'], 'jam', colors.danger, '#EA580C'], 'line-width': 8 }}
+          paint={{ 'line-color': ['match', ['get', 'level'], 'jam', c.danger, '#F08C2E'], 'line-width': 9 }}
         />
       </GeoJSONSource>
 
       {destination && screen !== 'home' && screen !== 'search' ? (
         <Marker id="destination" lngLat={ll(destination)} anchor="bottom">
           <Svg width={34} height={34} viewBox="0 0 24 24" accessibilityLabel="Destination">
-            <Path d="M12 22s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 15.8 12 22 12 22z" fill={colors.danger} stroke="#FFFFFF" strokeWidth={1.5} />
+            <Path d="M12 22s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 15.8 12 22 12 22z" fill={c.danger} stroke="#FFFFFF" strokeWidth={1.5} />
             <Circle cx={12} cy={10.5} r={2.6} fill="#FFFFFF" />
           </Svg>
         </Marker>
@@ -155,7 +157,7 @@ export const WaylineMap = forwardRef<WaylineMapHandle>(function WaylineMap(_, re
 
       {Object.values(reports).map((r) => (
         <Marker key={r.id} id={`report-${r.id}`} lngLat={[r.lng, r.lat]} anchor="bottom">
-          <View style={[styles.pill, { backgroundColor: reportColors[r.type] ?? colors.sub }]} accessibilityLabel={t('type.' + r.type as 'type.police')}>
+          <View style={[styles.pill, { backgroundColor: reportColors[r.type] ?? c.sub }]} accessibilityLabel={t('type.' + r.type as 'type.police')}>
             <Text style={styles.pillText}>{t(`type.${r.type}` as 'type.police')}</Text>
           </View>
         </Marker>
@@ -165,8 +167,8 @@ export const WaylineMap = forwardRef<WaylineMapHandle>(function WaylineMap(_, re
         <Marker id="me" lngLat={ll(puck)} anchor="center">
           <View style={{ transform: [{ rotate: `${screen === 'nav' ? 0 : heading}deg` }] }} accessibilityLabel="Your position">
             <Svg width={44} height={44} viewBox="0 0 40 40">
-              <Circle cx={20} cy={20} r={18} fill={colors.primary} fillOpacity={0.18} />
-              <Path d="M20 7 L30 31 L20 25 L10 31 Z" fill={colors.primary} stroke="#FFFFFF" strokeWidth={2.5} strokeLinejoin="round" />
+              <Circle cx={20} cy={20} r={18} fill={c.primary} fillOpacity={0.2} />
+              <Path d="M20 7 L30 31 L20 25 L10 31 Z" fill={c.primary} stroke="#FFFFFF" strokeWidth={2.5} strokeLinejoin="round" />
             </Svg>
           </View>
         </Marker>
@@ -176,6 +178,6 @@ export const WaylineMap = forwardRef<WaylineMapHandle>(function WaylineMap(_, re
 });
 
 const styles = StyleSheet.create({
-  pill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, borderWidth: 2, borderColor: '#FFFFFF' },
-  pillText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+  pill: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, borderWidth: 2, borderColor: '#FFFFFF' },
+  pillText: { color: REPORT_INK, fontSize: 11, fontFamily: fonts.heavy },
 });

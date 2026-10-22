@@ -1,12 +1,13 @@
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as Speech from 'expo-speech';
+import { Share } from 'react-native';
 import type { Report, ReportType, RouteOption } from '@wayline/contracts';
 import { cellsAround, formatDuration, haversineM, NavigationSession, type Fix, type LatLng } from '@wayline/navigation-core';
 import { config, isDevBuild } from '@/config';
 import { lang, speechLocale, t } from '@/i18n';
 import { realtime } from '@/api/realtime';
 import {
-  ApiError, createReport, nearbyReports, planRoutes, sendProbes, startTrip, tripEta, updateTrip, voteReport,
+  ApiError, createReport, departures, nearbyReports, planRoutes, sendProbes, shareTrip, startTrip, stopSharingTrip, tripEta, updateTrip, voteReport,
 } from '@/api/wayline';
 import { startNavGps, startSimulated, type NavLocationSource } from '@/location/location';
 import { setSetting, settings, type AlertType } from '@/state/settings';
@@ -78,6 +79,17 @@ export async function planTo(dest: Destination) {
   }
 }
 
+/** Drive time for leaving now vs. in 15 / 30 minutes on the selected route (best effort). */
+export async function loadDepartures(routeId: string) {
+  set({ departures: null });
+  try {
+    const list = await departures(routeId);
+    if (get().selectedRouteId === routeId) set({ departures: list });
+  } catch {
+    /* the row just stays hidden */
+  }
+}
+
 export function cancelPreview() {
   set({ screen: 'home', destination: null, routes: [], selectedRouteId: null });
 }
@@ -100,7 +112,7 @@ export async function startDrive() {
 
   let trip;
   try {
-    trip = await startTrip(route.id);
+    trip = await startTrip(route.id, s.destination.name);
   } catch (e) {
     // routes are cached server-side for 30 min; re-plan if they expired
     if (e instanceof ApiError && e.status === 404) {
@@ -116,7 +128,8 @@ export async function startDrive() {
     speak: (text) => speak(text),
     alertText: (r) => (settings().spokenAlerts[r.type as AlertType] ? t(`say.${r.type}` as 'say.police') : null),
     offerText: (savingS) => t('say.fasterRoute', { d: formatDuration(savingS, lang()) }),
-    sendProbes: (fixes) => sendProbes(trip.probeToken, fixes),
+    // "Help with live traffic" off: probes are dropped on the phone, nothing is sent
+    sendProbes: (fixes) => (settings().shareTraffic ? sendProbes(trip.probeToken, fixes) : Promise.resolve('drop' as const)),
     checkEta: async (at) => {
       const res = await tripEta(trip.tripId, at);
       return { remainingS: res.remainingS, fasterRoute: res.fasterRoute, savingS: res.savingS };
@@ -162,7 +175,7 @@ export async function startDrive() {
   drive = { session, tripId: trip.tripId, source, unsubscribe, finishing: false };
   realtime.setCells(route.cells);
   await activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => undefined);
-  set({ screen: 'nav', arrival: null });
+  set({ screen: 'nav', arrival: null, sharingUrl: null, reportsThisDrive: 0 });
   session.start();
 }
 
@@ -177,6 +190,8 @@ async function finish(how: 'arrived' | 'cancelled') {
   await d.session.end();
   deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => undefined);
   updateTrip(d.tripId, { status: how === 'arrived' ? 'finished' : 'cancelled' }).catch(() => undefined);
+  if (get().sharingUrl && how === 'cancelled') void stopSharingTrip(d.tripId);
+  set({ sharingUrl: null });
   drive = null;
   lastNearbyAt = null;
 
@@ -220,6 +235,27 @@ export function declineFasterRoute() {
   drive?.session.declineOffer();
 }
 
+/** Live-ETA link: arrival time only, never the location. Tapping again stops sharing. */
+export async function toggleShareEta() {
+  const d = drive;
+  if (!d) return;
+  if (get().sharingUrl) {
+    set({ sharingUrl: null });
+    await stopSharingTrip(d.tripId);
+    toast(t('stoppedSharing'));
+    return;
+  }
+  try {
+    const nav = get().nav;
+    const res = await shareTrip(d.tripId, nav?.remainingS ?? nav?.progress?.durationRemainingS);
+    set({ sharingUrl: res.url });
+    await Share.share({ message: t('shareMessage', { url: res.url }) });
+    toast(t('sharedEta'));
+  } catch (e) {
+    toast(msg(e));
+  }
+}
+
 // ---------- community ----------
 
 export async function report(type: ReportType) {
@@ -232,6 +268,7 @@ export async function report(type: ReportType) {
   try {
     const res = await createReport(type, at);
     upsertReport(res.report);
+    if (drive) set((st) => ({ reportsThisDrive: st.reportsThisDrive + 1 }));
     toast(res.merged ? t('confirmed', { type: typeLabel(type) }) : t('reported', { type: typeLabel(type) }));
   } catch (e) {
     toast(e instanceof ApiError && e.status === 429 ? t('tooManyReports') : msg(e));

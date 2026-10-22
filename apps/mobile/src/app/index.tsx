@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { BackHandler, StyleSheet, View } from 'react-native';
 import { getAccessToken } from '@/api/auth';
-import { savedPlaces } from '@/api/wayline';
+import { me, savedPlaces } from '@/api/wayline';
 import { HomePanel } from '@/components/HomePanel';
 import { NavPanel } from '@/components/NavPanel';
 import { ArrivedPanel, LocationDisclosure, ReportSheet, Toast } from '@/components/Overlays';
@@ -12,6 +12,7 @@ import { ensureForegroundPermission, watchIdle } from '@/location/location';
 import { cancelPreview, connectRealtime, refreshNearby } from '@/nav/drive';
 import { t } from '@/i18n';
 import { get, pruneReports, set, toast, useApp } from '@/state/store';
+import { useTheme } from '@/theme';
 
 /** Bootstraps session, location and the live report feed; screens are overlays on one map. */
 function useBootstrap() {
@@ -24,6 +25,7 @@ function useBootstrap() {
         await getAccessToken();
         connectRealtime();
         savedPlaces().then((saved) => set({ saved })).catch(() => undefined);
+        me().then((m) => set({ me: m })).catch(() => undefined);
       } catch {
         toast(t('cantReach'));
       }
@@ -64,11 +66,12 @@ function useBackButton() {
 export default function MapScreen() {
   const map = useRef<WaylineMapHandle>(null);
   const screen = useApp((s) => s.screen);
+  const c = useTheme();
   useBootstrap();
   useBackButton();
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: c.mapBg }]}>
       <WaylineMap ref={map} />
       {screen === 'home' ? <HomePanel onRecenter={() => map.current?.recenter()} /> : null}
       {screen === 'preview' ? <PreviewPanel /> : null}
@@ -82,4 +85,4 @@ export default function MapScreen() {
   );
 }
 
-const styles = StyleSheet.create({ root: { flex: 1, backgroundColor: '#E9EDF1' } });
+const styles = StyleSheet.create({ root: { flex: 1 } });

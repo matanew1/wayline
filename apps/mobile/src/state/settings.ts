@@ -4,10 +4,15 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 export type LanguagePref = 'system' | 'en' | 'he';
+export type ThemePref = 'auto' | 'light' | 'dark';
+export type Vehicle = 'car' | 'motorcycle';
 export type AlertType = 'police' | 'crash' | 'hazard' | 'closure' | 'camera' | 'traffic';
 
 export interface Settings {
   language: LanguagePref;
+  /** Auto follows the phone's light/dark appearance. */
+  theme: ThemePref;
+  vehicle: Vehicle;
   voice: boolean;
   avoidTolls: boolean;
   avoidHighways: boolean;
@@ -18,10 +23,14 @@ export interface Settings {
   phone: string | null;
   /** The background-location disclosure was shown and accepted. */
   bgDisclosureAccepted: boolean;
+  /** Send anonymous speed samples while driving (live traffic). Off = no probes at all. */
+  shareTraffic: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   language: 'system',
+  theme: 'auto',
+  vehicle: 'car',
   voice: true,
   avoidTolls: false,
   avoidHighways: false,
@@ -30,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   recents: [],
   phone: null,
   bgDisclosureAccepted: false,
+  shareTraffic: true,
 };
 
 /** Persisted per-device preferences. Secrets (tokens) live in SecureStore, not here. */

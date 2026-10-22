@@ -1,0 +1,45 @@
+# Profile: rename yourself, see reputation and stats; Settings: dark theme on and off.
+appId: com.wayline.app.dev
+name: Profile and dark theme
+tags: [profile, settings]
+---
+- runFlow: subflows/launch.yaml
+- tapOn:
+    id: open-profile
+- extendedWaitUntil:
+    visible:
+      id: profile-hero
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: reputation-level
+    timeout: 10000
+- assertVisible:
+    id: stat-drives
+- tapOn:
+    id: edit-name
+- tapOn:
+    id: nickname-input
+- inputText: Night Owl
+- tapOn:
+    id: nickname-save
+- extendedWaitUntil:
+    visible: "Night Owl"
+    timeout: 10000
+- tapOn:
+    id: profile-back
+- extendedWaitUntil:
+    visible:
+      id: where-to
+    timeout: 10000
+- tapOn:
+    id: open-settings
+- tapOn:
+    id: theme-dark
+# the screen re-renders in the dark palette and stays usable
+- assertVisible: "Settings"
+- assertVisible:
+    id: open-account
+- tapOn:
+    id: theme-auto
+- assertVisible: "Settings"

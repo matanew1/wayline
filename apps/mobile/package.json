@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "main": "index.ts",
   "dependencies": {
+    "@g4rb4g3/react-native-carplay": "2.7.22-wayline.1",
     "@maplibre/maplibre-react-native": "^11.5.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@wayline/contracts": "^0.1.0",
@@ -10,6 +11,7 @@
     "expo": "~58.0.16",
     "expo-build-properties": "~58.0.11",
     "expo-constants": "~58.0.12",
+    "expo-dev-client": "~58.0.15",
     "expo-keep-awake": "~58.0.3",
     "expo-linking": "~58.0.13",
     "expo-localization": "~58.0.5",
@@ -25,8 +27,7 @@
     "react-native-screens": "~4.30.0",
     "react-native-svg": "15.16.0",
     "socket.io-client": "^4.8.1",
-    "zustand": "^5.0.8",
-    "@g4rb4g3/react-native-carplay": "2.7.22-wayline.1"
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@types/react": "~19.3.0",
@@ -35,7 +36,7 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --dev-client",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",

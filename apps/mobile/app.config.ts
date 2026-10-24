@@ -64,5 +64,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     mapStyleUrl: process.env.EXPO_PUBLIC_MAP_STYLE_URL,
     variant,
     car,
+    eas: { projectId: '34850f68-8905-4202-82fe-7d3fa5a0d0af' },
   },
 });
